@@ -1,0 +1,2004 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boots on the ground: one script for a fresh Linux box</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #E9EDF2;
+  --surface: #FFFFFF;
+  --ink: #18202B;
+  --muted: #5B6676;
+  --line: #CDD5DF;
+  --accent: #2449C9;
+  --accent-soft: #DCE4FB;
+  --on-accent: #FFFFFF;
+  --mark: #F2B53A;
+  --code-bg: #172340;
+  --code-ink: #DCE4F2;
+  --code-dim: #8796B5;
+  --code-hi: #F2B53A;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #151A22; --surface: #1D2430; --ink: #E6EBF2; --muted: #98A3B3;
+    --line: #2E3746; --accent: #7C9BFF; --accent-soft: #24304D; --on-accent: #10172A;
+    --mark: #F2B53A; --code-bg: #0F1A33; --code-ink: #DCE4F2; --code-dim: #7887A6; --code-hi: #F2B53A;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151A22; --surface: #1D2430; --ink: #E6EBF2; --muted: #98A3B3;
+  --line: #2E3746; --accent: #7C9BFF; --accent-soft: #24304D; --on-accent: #10172A;
+  --mark: #F2B53A; --code-bg: #0F1A33; --code-ink: #DCE4F2; --code-dim: #7887A6; --code-hi: #F2B53A;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
+
+header.top { padding: clamp(28px, 6vw, 56px) 0 clamp(20px, 3vw, 32px); }
+header.top h1 {
+  font-family: var(--display); font-weight: 800;
+  font-size: clamp(2.2rem, 6vw, 4rem); line-height: 0.95; letter-spacing: -0.03em;
+  margin: 0 0 14px; max-width: 14ch;
+}
+header.top p { margin: 0; color: var(--muted); font-size: 1.075rem; max-width: 58ch; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(20px, 3vw, 40px); align-items: start; padding-bottom: 64px; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.stephead { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; }
+.stephead .n {
+  font-family: var(--display); font-weight: 800; font-size: 1.05rem;
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  display: inline-grid; place-items: center; background: var(--ink); color: var(--bg);
+  transform: translateY(-2px);
+}
+.stephead h2 { font-family: var(--display); font-weight: 700; font-size: 1.45rem; letter-spacing: -0.01em; margin: 0; }
+.stephead .aside { margin-left: auto; display: flex; gap: 6px; }
+
+section.step + section.step { margin-top: 36px; }
+
+/* Package manager picker */
+.pms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 520px) { .pms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pm { position: relative; }
+.pm input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.pm label {
+  display: block; padding: 12px 14px 11px; border-radius: 10px;
+  background: var(--surface); border: 1.5px solid var(--line); cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.pm .cmd { font-family: var(--display); font-weight: 700; font-size: 1.3rem; letter-spacing: -0.01em; display: block; line-height: 1.2; }
+.pm .distros { color: var(--muted); font-size: .82rem; display: block; line-height: 1.35; margin-top: 2px; }
+.pm .cmd small { font: 500 .78rem/1 var(--body); color: var(--muted); letter-spacing: 0; vertical-align: 2px; }
+.pm input:checked + label { border-color: var(--accent); background: var(--accent-soft); }
+.pm input:checked + label .cmd { color: var(--accent); }
+.pm input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Tool filter */
+.filter { position: relative; margin: 0 0 16px; }
+.filter input {
+  width: 100%; font: 400 1rem/1.4 var(--body); color: var(--ink); background: var(--surface);
+  border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 44px 10px 38px;
+  -webkit-appearance: none; appearance: none;
+}
+.filter input::placeholder { color: var(--muted); opacity: 1; }
+.filter input:focus { border-color: var(--accent); }
+.filter .icon { position: absolute; left: 13px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.filter kbd {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none;
+  font: 500 .78rem/1 var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px;
+}
+.filter input:focus ~ kbd, .filter input:not(:placeholder-shown) ~ kbd { display: none; }
+@media (hover: none) { .filter kbd { display: none; } }
+.qstatus { margin: -8px 0 14px; color: var(--muted); font-size: .88rem; }
+.qstatus:empty { display: none; }
+
+/* Tools */
+.group { margin-top: 18px; }
+.group:first-of-type { margin-top: 0; }
+.group[hidden], .tool[hidden] { display: none; }
+.group h3 { font-size: .95rem; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+.group h3 .gcount { font-weight: 500; font-size: .82rem; color: var(--accent); margin-left: 4px; }
+.tools { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.tool { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 10px 14px; cursor: pointer; position: relative; }
+.tool:not([hidden]) ~ .tool:not([hidden]) { border-top: 1px solid var(--line); }
+.tool:hover { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.tool input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.box {
+  grid-row: span 2; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--muted);
+  display: grid; place-items: center; transition: background .1s, border-color .1s;
+}
+.box svg { width: 14px; height: 14px; opacity: 0; transform: scale(.6); transition: opacity .1s, transform .12s; }
+.tool input:checked ~ .box { background: var(--accent); border-color: var(--accent); }
+.tool input:checked ~ .box svg { opacity: 1; transform: none; }
+.tool input:focus-visible ~ .box { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tool.locked { cursor: default; }
+.tool.locked input ~ .box { background: var(--accent-soft); border-color: var(--accent); border-style: dashed; }
+.tool.locked input ~ .box svg { opacity: 1; transform: none; color: var(--accent); }
+.tool .name { font-weight: 600; }
+.tool .desc { color: var(--muted); font-size: .9rem; grid-column: 2; line-height: 1.4; }
+.tool .desc em { font-style: normal; color: var(--accent); font-weight: 500; }
+.tool .why { display: block; font-size: .82rem; margin-top: 1px; }
+.tool.skipped { cursor: not-allowed; }
+.tool.skipped.picked { cursor: pointer; }
+.tool.skipped:hover { background: none; }
+.tool.skipped .name { color: var(--muted); }
+.tool.skipped .box { border-style: dashed; }
+.tool.skipped input:checked ~ .box { background: var(--muted); border-color: var(--muted); }
+.tool.skipped .via { border-style: dashed; }
+.via {
+  grid-row: span 2; font-size: .78rem; font-weight: 500; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+}
+.via.native { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+.btn {
+  font: 500 .875rem/1 var(--body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+
+.opt { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; color: var(--ink); font-size: .95rem; cursor: pointer; }
+.opt input { margin: 4px 0 0; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+.opt span small { display: block; color: var(--muted); font-size: .85rem; }
+
+/* Script panel */
+.panel { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+@media (max-width: 900px) { .panel { position: static; } }
+.term { background: var(--code-bg); color: var(--code-ink); border-radius: 14px; overflow: hidden; }
+.termbar { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; flex-wrap: wrap; }
+.termbar .title { font-family: var(--display); font-weight: 700; font-size: 1.05rem; margin-right: auto; }
+.seg { display: inline-flex; background: rgba(255,255,255,.07); border-radius: 8px; padding: 3px; }
+.seg button {
+  font: 500 .8rem/1 var(--body); color: var(--code-dim); background: none; border: 0;
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: rgba(255,255,255,.12); color: var(--code-ink); }
+.copy {
+  font: 600 .875rem/1 var(--body); background: var(--mark); color: #1E1606; border: 0;
+  border-radius: 8px; padding: 9px 14px; cursor: pointer; min-width: 112px;
+}
+.copy:disabled { opacity: .45; cursor: not-allowed; }
+.hint { margin: 0; padding: 0 16px 10px; color: var(--code-dim); font-size: .85rem; }
+.hint code { font-family: var(--mono); color: var(--code-ink); font-size: .82rem; }
+pre.code {
+  margin: 0; padding: 14px 16px 18px; max-height: min(62vh, 640px); overflow: auto;
+  font: 12.5px/1.6 var(--mono); tab-size: 2; border-top: 1px solid rgba(255,255,255,.08);
+}
+pre.code .c { color: var(--code-dim); }
+pre.code .h { color: var(--code-hi); }
+.empty { padding: 44px 20px 48px; text-align: center; color: var(--code-dim); border-top: 1px solid rgba(255,255,255,.08); }
+.empty strong { display: block; color: var(--code-ink); font-family: var(--display); font-size: 1.2rem; font-weight: 700; margin-bottom: 4px; }
+
+.meta { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.summary { color: var(--muted); font-size: .92rem; margin: 0; }
+.combo { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.combo .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.combo .k { font-weight: 600; font-size: .92rem; }
+.combo .id { font-family: var(--mono); font-size: .9rem; color: var(--accent); word-break: break-all; }
+.combo p { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
+.combo .future { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.combo .soon { color: var(--muted); font-size: .85rem; }
+.combo .future code { font-family: var(--mono); font-size: .82rem; color: var(--muted); display: block; overflow-x: auto; white-space: nowrap; padding: 2px 0; }
+
+footer { color: var(--muted); font-size: .85rem; padding: 0 0 40px; max-width: 70ch; }
+footer p { margin: 0 0 6px; }
+footer a { color: inherit; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Boots on the ground</h1>
+    <p>Fresh Linux box? Pick your package manager, tick the tools you want, and paste one script. It installs what your distro packages natively and fetches the rest from upstream.</p>
+  </header>
+
+  <div class="layout">
+    <main>
+      <section class="step" aria-labelledby="s1">
+        <div class="stephead"><span class="n" aria-hidden="true">1</span><h2 id="s1">Your system</h2></div>
+        <div class="pms" id="pms" role="radiogroup" aria-labelledby="s1"></div>
+      </section>
+
+      <section class="step" aria-labelledby="s2">
+        <div class="stephead">
+          <span class="n" aria-hidden="true">2</span><h2 id="s2">Your tools</h2>
+          <div class="aside"><button class="btn" id="all" type="button">Select all</button><button class="btn" id="none" type="button">Clear</button></div>
+        </div>
+        <div class="filter">
+          <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.5 10.5L14 14"/></svg>
+          <input type="search" id="q" placeholder="Filter tools" aria-label="Filter tools" aria-describedby="qhelp" autocomplete="off" spellcheck="false" enterkeyhint="search">
+          <kbd aria-hidden="true">/</kbd>
+        </div>
+        <p class="sr-only" id="qhelp">Matches tool names, descriptions and groups. Press slash to jump here, Escape to clear.</p>
+        <p class="qstatus" id="qstatus" role="status" aria-live="polite"></p>
+        <div id="groups"></div>
+        <label class="opt"><input type="checkbox" id="rcopt" checked>
+          <span>Wire up my shell<small>Adds PATH and the shell hooks for <span id="hooks">zoxide, fzf, starship, direnv, atuin and mise</span> (the ones you pick) to your .bashrc or .zshrc. Shell functions like clipcat, and the nvm and SDKMAN setup that node and java need, are always added there.</small></span>
+        </label>
+      </section>
+    </main>
+
+    <aside class="panel" aria-labelledby="s3">
+      <div class="stephead"><span class="n" aria-hidden="true">3</span><h2 id="s3">Your script</h2></div>
+      <div class="term">
+        <div class="termbar">
+          <span class="title" id="termtitle">install.sh</span>
+          <div class="seg" role="group" aria-label="Script format">
+            <button type="button" data-mode="paste" aria-pressed="true">Paste into terminal</button>
+            <button type="button" data-mode="file" aria-pressed="false">install.sh</button>
+          </div>
+          <button class="copy" id="copy" type="button">Copy script</button>
+        </div>
+        <p class="hint" id="hint"></p>
+        <div id="out"></div>
+      </div>
+      <div class="meta">
+        <p class="summary" id="summary"></p>
+        <div class="combo">
+          <div class="row"><span class="k">Combo ID</span><span class="id" id="comboid"></span></div>
+          <p>The same picks always give the same ID, and this page’s link keeps it, so you can bookmark or share your set.</p>
+          <div class="future">
+            <div class="row"><span class="k">One-liner</span><span class="soon">coming in v1.1.0 — not live yet</span></div>
+            <code id="oneliner"></code>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <p>Read any script before you run it. System packages are installed with sudo (or doas); tools fetched from upstream go under your home directory (mostly ~/.local/bin; nvm, SDKMAN and rustup keep their own folders), except Go in /usr/local/go. Each step skips anything already on your PATH, so running it twice is safe.</p>
+    <p class="ver" id="ver">dev-tools-installer dev build</p>
+  </footer>
+</div>
+
+<!-- ===================== bash snippets (raw text, no escaping) ===================== -->
+
+<script type="text/plain" data-snip="preamble">
+BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
+mkdir -p "$BIN_DIR"
+export PATH="$BIN_DIR:$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
+USER="${USER:-$(id -un)}"
+FAILED=()
+
+case "$(uname -m)" in
+  x86_64)        DEB_ARCH=amd64; GO_ARCH=amd64; UNAME_ARCH=x86_64 ;;
+  aarch64|arm64) DEB_ARCH=arm64; GO_ARCH=arm64; UNAME_ARCH=aarch64 ;;
+  *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+export DEB_ARCH GO_ARCH UNAME_ARCH
+
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+  if command -v sudo >/dev/null 2>&1; then SUDO="sudo"
+  elif command -v doas >/dev/null 2>&1; then SUDO="doas"
+  else echo "this script needs root, sudo or doas" >&2; exit 1
+  fi
+fi
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# step <label> <function>: run one install, record failures, keep going
+step() {
+  echo "--> $1"
+  if "$2"; then echo "    ok"; else echo "    FAILED: $1" >&2; FAILED+=("$1"); fi
+}
+</script>
+
+<script type="text/plain" data-snip="helpers">
+# Latest release tag of a GitHub repo, without a leading "v".
+# Follows the /releases/latest redirect, so there is no API rate limit.
+gh_latest_tag() {
+  local url
+  url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest")" || return 1
+  case "$url" in
+    */tag/*) echo "${url##*/tag/}" | sed 's/^v//' ;;
+    *) echo "could not resolve the latest release of $1" >&2; return 1 ;;
+  esac
+}
+
+# install_from_tarball <url> <binary>: download, unpack, copy <binary> into $BIN_DIR
+install_from_tarball() {
+  local tmp bin rc=1
+  tmp="$(mktemp -d)"
+  if curl -fsSL "$1" -o "$tmp/pkg.tgz" && tar -xzf "$tmp/pkg.tgz" -C "$tmp"; then
+    bin="$(find "$tmp" -type f -name "$2" | head -n1)"
+    if [ -n "$bin" ]; then
+      install -m 0755 "$bin" "$BIN_DIR/$2" && rc=0
+    else
+      echo "$2 not found in archive" >&2
+    fi
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="pm-install">
+# pm_install <pkg>...: all at once; if that fails, one at a time, so a single unavailable
+# package doesn't stop the rest. Whatever still fails is left in PKG_FAILED.
+pm_install() {
+  PKG_FAILED=()
+  pm_try "$@" && return 0
+  if [ "$#" -gt 1 ]; then
+    echo "    the batch failed; installing the packages one at a time"
+    local p
+    for p in "$@"; do pm_try "$p" >/dev/null || PKG_FAILED+=("$p"); done
+  else
+    PKG_FAILED=("$1")
+  fi
+  [ "${#PKG_FAILED[@]}" -eq 0 ] && return 0
+  echo "    could not install: ${PKG_FAILED[*]}" >&2
+  return 1
+}
+</script>
+
+<script type="text/plain" data-snip="fallback">
+# fallback <label> <function> <bin>: the upstream install, run only when the distro
+# package did not provide <bin> (not packaged on this release, or it failed to install)
+fallback() {
+  have "$3" && return 0
+  echo "--> $1: native package unavailable, using upstream"
+  if "$2"; then echo "    ok"; else echo "    FAILED: $1" >&2; FAILED+=("$1"); fi
+}
+</script>
+
+<script type="text/plain" data-snip="gh-repo-apt">
+if [ ! -f /etc/apt/sources.list.d/github-cli.list ]; then
+  $SUDO mkdir -p -m 755 /etc/apt/keyrings
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+  $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$DEB_ARCH signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+fi
+</script>
+
+<script type="text/plain" data-snip="gh-repo-dnf">
+if ! dnf repolist 2>/dev/null | grep -q gh-cli; then
+  if dnf --version 2>/dev/null | grep -q dnf5; then
+    $SUDO dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo
+  else
+    $SUDO dnf install -y 'dnf-command(config-manager)'
+    $SUDO dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+  fi
+fi
+</script>
+
+<script type="text/plain" data-snip="gh-repo-yum">
+if [ ! -f /etc/yum.repos.d/gh-cli.repo ]; then
+  $SUDO yum install -y yum-utils
+  $SUDO yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+fi
+</script>
+
+<script type="text/plain" data-snip="gh-repo-zypper">
+zypper lr 2>/dev/null | grep -q gh-cli \
+  || $SUDO zypper --non-interactive addrepo https://cli.github.com/packages/rpm/gh-cli.repo
+</script>
+
+<script type="text/plain" data-snip="docker-post-openrc">
+$SUDO rc-update add docker default || true
+$SUDO service docker start || true
+</script>
+
+<script type="text/plain" data-snip="docker-post-systemd">
+$SUDO systemctl enable --now docker || true
+</script>
+
+<script type="text/plain" data-snip="docker-get">
+install_docker() {
+  have docker && { echo "    already installed"; return 0; }
+  curl -fsSL https://get.docker.com | $SUDO sh
+}
+</script>
+
+<script type="text/plain" data-snip="docker-yum">
+install_docker() {
+  have docker && { echo "    already installed"; return 0; }
+  # Amazon Linux 2 ships Docker in Amazon's own extras repo (get.docker.com does not support it)
+  if have amazon-linux-extras; then
+    $SUDO amazon-linux-extras install -y docker || return 1
+    $SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+    return 0
+  fi
+  curl -fsSL https://get.docker.com | $SUDO sh
+}
+</script>
+
+<script type="text/plain" data-snip="docker-dnf">
+install_docker() {
+  have docker && { echo "    already installed"; return 0; }
+  curl -fsSL https://get.docker.com | $SUDO sh && have docker && return 0
+  # get.docker.com sends some RHEL rebuilds (Rocky 9 today) to an empty repo;
+  # Docker's CentOS repo carries the same packages for them
+  [ "$(. /etc/os-release 2>/dev/null; echo "${ID:-}")" != fedora ] || return 1
+  echo "    retrying from Docker's CentOS repo"
+  curl -fsSL https://download.docker.com/linux/centos/docker-ce.repo | $SUDO tee /etc/yum.repos.d/docker-ce.repo >/dev/null \
+    && $SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || return 1
+  # start it now and at boot, as get.docker.com does (fails harmlessly without systemd, e.g. in a container)
+  $SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+}
+</script>
+
+<script type="text/plain" data-snip="ripgrep-bin">
+install_ripgrep() {
+  have rg && { echo "    already installed"; return 0; }
+  # upstream has no aarch64 musl build: never leave a glibc binary on a musl system
+  if [ "$UNAME_ARCH" = aarch64 ] && ls /lib/ld-musl-* >/dev/null 2>&1; then echo "no aarch64 musl build of ripgrep upstream" >&2; return 1; fi
+  local ver target
+  ver="$(gh_latest_tag BurntSushi/ripgrep)" || return 1
+  case "$UNAME_ARCH" in
+    x86_64)  target=x86_64-unknown-linux-musl ;;
+    aarch64) target=aarch64-unknown-linux-gnu ;;
+  esac
+  install_from_tarball "https://github.com/BurntSushi/ripgrep/releases/download/${ver}/ripgrep-${ver}-${target}.tar.gz" rg
+}
+</script>
+
+<script type="text/plain" data-snip="fzf-bin">
+install_fzf() {
+  have fzf && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag junegunn/fzf)" || return 1
+  install_from_tarball "https://github.com/junegunn/fzf/releases/download/v${ver}/fzf-${ver}-linux_${GO_ARCH}.tar.gz" fzf
+}
+</script>
+
+<script type="text/plain" data-snip="jq-bin">
+install_jq() {
+  have jq && { echo "    already installed"; return 0; }
+  curl -fsSL "https://github.com/jqlang/jq/releases/latest/download/jq-linux-${GO_ARCH}" -o "$BIN_DIR/jq" \
+    && chmod +x "$BIN_DIR/jq"
+}
+</script>
+
+<script type="text/plain" data-snip="uv-script">
+install_uv() {
+  have uv && { echo "    already installed"; return 0; }
+  curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
+}
+</script>
+
+<script type="text/plain" data-snip="rust-script">
+install_rust() {
+  have cargo && { echo "    already installed"; return 0; }
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --no-modify-path --default-toolchain stable
+}
+</script>
+
+<script type="text/plain" data-snip="go-tarball">
+install_go() {
+  have go && { echo "    already installed"; return 0; }
+  local ver tmp rc
+  ver="$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -n1)"
+  [ -n "$ver" ] || { echo "could not resolve the latest Go version" >&2; return 1; }
+  tmp="$(mktemp -d)"
+  curl -fsSL "https://go.dev/dl/${ver}.linux-${GO_ARCH}.tar.gz" -o "$tmp/go.tgz" || { rm -rf "$tmp"; return 1; }
+  $SUDO rm -rf /usr/local/go
+  $SUDO tar -C /usr/local -xzf "$tmp/go.tgz"; rc=$?
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="zoxide-script">
+install_zoxide() {
+  have zoxide && { echo "    already installed"; return 0; }
+  curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+}
+</script>
+
+<script type="text/plain" data-snip="lazygit-bin">
+install_lazygit() {
+  have lazygit && { echo "    already installed"; return 0; }
+  local ver arch
+  ver="$(gh_latest_tag jesseduffield/lazygit)" || return 1
+  case "$UNAME_ARCH" in x86_64) arch=x86_64 ;; aarch64) arch=arm64 ;; esac
+  install_from_tarball "https://github.com/jesseduffield/lazygit/releases/download/v${ver}/lazygit_${ver}_linux_${arch}.tar.gz" lazygit
+}
+</script>
+
+<script type="text/plain" data-snip="lazydocker-bin">
+install_lazydocker() {
+  have lazydocker && { echo "    already installed"; return 0; }
+  local ver arch
+  ver="$(gh_latest_tag jesseduffield/lazydocker)" || return 1
+  case "$UNAME_ARCH" in x86_64) arch=x86_64 ;; aarch64) arch=arm64 ;; esac
+  install_from_tarball "https://github.com/jesseduffield/lazydocker/releases/download/v${ver}/lazydocker_${ver}_Linux_${arch}.tar.gz" lazydocker
+}
+</script>
+
+<script type="text/plain" data-snip="bottom-deb">
+install_bottom() {
+  have btm && { echo "    already installed"; return 0; }
+  local ver tmp rc
+  ver="$(gh_latest_tag ClementTsang/bottom)" || return 1
+  tmp="$(mktemp -d)"
+  curl -fsSL "https://github.com/ClementTsang/bottom/releases/download/${ver}/bottom_${ver}-1_${DEB_ARCH}.deb" -o "$tmp/bottom.deb" \
+    || { rm -rf "$tmp"; return 1; }
+  $SUDO dpkg -i "$tmp/bottom.deb"; rc=$?
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="bottom-bin">
+install_bottom() {
+  have btm && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag ClementTsang/bottom)" || return 1
+  install_from_tarball "https://github.com/ClementTsang/bottom/releases/download/${ver}/bottom_${UNAME_ARCH}-unknown-linux-gnu.tar.gz" btm
+}
+</script>
+
+<script type="text/plain" data-snip="glow-bin">
+install_glow() {
+  have glow && { echo "    already installed"; return 0; }
+  local ver arch
+  ver="$(gh_latest_tag charmbracelet/glow)" || return 1
+  case "$UNAME_ARCH" in x86_64) arch=x86_64 ;; aarch64) arch=arm64 ;; esac
+  install_from_tarball "https://github.com/charmbracelet/glow/releases/download/v${ver}/glow_${ver}_Linux_${arch}.tar.gz" glow
+}
+</script>
+
+<script type="text/plain" data-snip="yq-bin">
+install_yq() {
+  have yq && { echo "    already installed"; return 0; }
+  curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${GO_ARCH}" -o "$BIN_DIR/yq" \
+    && chmod +x "$BIN_DIR/yq"
+}
+</script>
+
+<script type="text/plain" data-snip="gron-bin">
+install_gron() {
+  have gron && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag tomnomnom/gron)" || return 1
+  install_from_tarball "https://github.com/tomnomnom/gron/releases/download/v${ver}/gron-linux-${GO_ARCH}-${ver}.tgz" gron
+}
+</script>
+
+<script type="text/plain" data-snip="jnv-cargo">
+install_jnv() {
+  have jnv && { echo "    already installed"; return 0; }
+  have cargo || { echo "cargo not found, so jnv can't be built" >&2; return 1; }
+  cargo install --locked jnv
+}
+</script>
+
+<script type="text/plain" data-snip="harlequin-uv">
+install_harlequin() {
+  have harlequin && { echo "    already installed"; return 0; }
+  have uv || { echo "uv not found" >&2; return 1; }
+  # pin a Python its compiled dependencies ship wheels for (a distro's newest python3 may not have them yet)
+  uv tool install --python 3.13 harlequin
+}
+</script>
+
+<script type="text/plain" data-snip="visidata-uv">
+install_visidata() {
+  have vd && { echo "    already installed"; return 0; }
+  have uv || { echo "uv not found" >&2; return 1; }
+  uv tool install visidata
+}
+</script>
+
+<script type="text/plain" data-snip="apptainer-deb">
+install_apptainer() {
+  have apptainer && { echo "    already installed"; return 0; }
+  local ver suffix="" tmp ubuntu rc ppa=https://ppa.launchpadcontent.net/apptainer/ppa/ubuntu
+  # Ubuntu and its derivatives (Mint, Pop!_OS, ...) name their Ubuntu base here
+  ubuntu="$(. /etc/os-release 2>/dev/null; echo "${UBUNTU_CODENAME:-}")"
+  # Apptainer's release .debs are amd64 only, in two builds: one for libfuse3-3 systems (Debian 12,
+  # Ubuntu 24.04) and a "-trixie+" one for libfuse3-4 systems (Debian 13+, Ubuntu 26.04).
+  # Use it only if apt says it can actually be installed here.
+  if [ "$DEB_ARCH" = amd64 ]; then
+    ver="$(gh_latest_tag apptainer/apptainer)" || return 1
+    apt-cache show libfuse3-4 >/dev/null 2>&1 && suffix="-trixie+"
+    tmp="$(mktemp -d)"
+    chmod 755 "$tmp"
+    if curl -fsSL "https://github.com/apptainer/apptainer/releases/download/v${ver}/apptainer_${ver}${suffix}_${DEB_ARCH}.deb" -o "$tmp/apptainer.deb" \
+       && apt-get install -s -y "$tmp/apptainer.deb" >/dev/null 2>&1; then
+      $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp/apptainer.deb"; rc=$?
+      rm -rf "$tmp"
+      return $rc
+    fi
+    rm -rf "$tmp"
+  fi
+  # No release .deb fits (Ubuntu 22.04, or arm64). Ubuntu and derivatives: Apptainer's official PPA,
+  # if it builds for this release; key pinned by fingerprint; undone again if the install fails.
+  if [ -n "$ubuntu" ] && curl -fsSI "$ppa/dists/$ubuntu/InRelease" >/dev/null 2>&1; then
+    echo "    no release .deb fits this system; using the official Apptainer PPA (ppa:apptainer/ppa)"
+    $SUDO mkdir -p -m 755 /etc/apt/keyrings
+    if curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF6B0F5193D4F3301EF491FF0AFE36534FC6218AE" \
+         | $SUDO tee /etc/apt/keyrings/apptainer-ppa.asc >/dev/null \
+       && echo "deb [signed-by=/etc/apt/keyrings/apptainer-ppa.asc] $ppa $ubuntu main" \
+         | $SUDO tee /etc/apt/sources.list.d/apptainer-ppa.list >/dev/null \
+       && $SUDO apt-get update -y >/dev/null \
+       && $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y apptainer; then
+      return 0
+    fi
+    echo "    the PPA install failed; removing the PPA again" >&2
+    $SUDO rm -f /etc/apt/sources.list.d/apptainer-ppa.list /etc/apt/keyrings/apptainer-ppa.asc
+    return 1
+  fi
+  echo "no apptainer package fits this system (see apptainer.org/docs/admin/main/installation.html)" >&2
+  return 1
+}
+</script>
+
+<script type="text/plain" data-snip="apptainer-dnf">
+install_apptainer() {
+  have apptainer && { echo "    already installed"; return 0; }
+  # Fedora has it in the main repos; RHEL, Rocky and Alma get it from EPEL
+  $SUDO dnf install -y apptainer && return 0
+  $SUDO dnf install -y epel-release && $SUDO dnf install -y apptainer
+}
+</script>
+
+<script type="text/plain" data-snip="kubectl-bin">
+install_kubectl() {
+  have kubectl && { echo "    already installed"; return 0; }
+  local ver base tmp rc=1
+  ver="$(curl -fsSL https://dl.k8s.io/release/stable.txt)" || return 1
+  base="https://dl.k8s.io/release/${ver}/bin/linux/${GO_ARCH}/kubectl"
+  tmp="$(mktemp -d)"
+  if curl -fsSL "$base" -o "$tmp/kubectl" && curl -fsSL "$base.sha256" -o "$tmp/kubectl.sha256" \
+     && (cd "$tmp" && echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c - >/dev/null); then
+    install -m 0755 "$tmp/kubectl" "$BIN_DIR/kubectl" && rc=0
+  else
+    echo "kubectl download or checksum check failed" >&2
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="k9s-bin">
+install_k9s() {
+  have k9s && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag derailed/k9s)" || return 1
+  install_from_tarball "https://github.com/derailed/k9s/releases/download/v${ver}/k9s_Linux_${GO_ARCH}.tar.gz" k9s
+}
+</script>
+
+<script type="text/plain" data-snip="helm-bin">
+install_helm() {
+  have helm && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(curl -fsSL https://get.helm.sh/helm-latest-version)" || return 1
+  install_from_tarball "https://get.helm.sh/helm-${ver}-linux-${GO_ARCH}.tar.gz" helm
+}
+</script>
+
+<script type="text/plain" data-snip="kind-bin">
+install_kind() {
+  have kind && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag kubernetes-sigs/kind)" || return 1
+  curl -fsSL "https://github.com/kubernetes-sigs/kind/releases/download/v${ver}/kind-linux-${GO_ARCH}" -o "$BIN_DIR/kind" \
+    && chmod +x "$BIN_DIR/kind"
+}
+</script>
+
+<script type="text/plain" data-snip="dive-bin">
+install_dive() {
+  have dive && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag wagoodman/dive)" || return 1
+  install_from_tarball "https://github.com/wagoodman/dive/releases/download/v${ver}/dive_${ver}_linux_${GO_ARCH}.tar.gz" dive
+}
+</script>
+
+<script type="text/plain" data-snip="fd-bin">
+install_fd() {
+  have fd && { echo "    already installed"; return 0; }
+  local ver target
+  ver="$(gh_latest_tag sharkdp/fd)" || return 1
+  target=${UNAME_ARCH}-unknown-linux-musl
+  install_from_tarball "https://github.com/sharkdp/fd/releases/download/v${ver}/fd-v${ver}-${target}.tar.gz" fd
+}
+</script>
+
+<script type="text/plain" data-snip="bat-bin">
+install_bat() {
+  have bat && { echo "    already installed"; return 0; }
+  local ver target
+  ver="$(gh_latest_tag sharkdp/bat)" || return 1
+  target=${UNAME_ARCH}-unknown-linux-musl
+  install_from_tarball "https://github.com/sharkdp/bat/releases/download/v${ver}/bat-v${ver}-${target}.tar.gz" bat
+}
+</script>
+
+<script type="text/plain" data-snip="eza-bin">
+install_eza() {
+  have eza && { echo "    already installed"; return 0; }
+  # upstream has no aarch64 musl build: never leave a glibc binary on a musl system
+  if [ "$UNAME_ARCH" = aarch64 ] && ls /lib/ld-musl-* >/dev/null 2>&1; then echo "no aarch64 musl build of eza upstream" >&2; return 1; fi
+  local ver target
+  ver="$(gh_latest_tag eza-community/eza)" || return 1
+  # no aarch64 musl build upstream; the gnu one is used there
+  case "$UNAME_ARCH" in
+    x86_64)  target=x86_64-unknown-linux-musl ;;
+    aarch64) target=aarch64-unknown-linux-gnu ;;
+  esac
+  install_from_tarball "https://github.com/eza-community/eza/releases/download/v${ver}/eza_${target}.tar.gz" eza
+}
+</script>
+
+<script type="text/plain" data-snip="delta-bin">
+install_delta() {
+  have delta && { echo "    already installed"; return 0; }
+  # upstream has no aarch64 musl build: never leave a glibc binary on a musl system
+  if [ "$UNAME_ARCH" = aarch64 ] && ls /lib/ld-musl-* >/dev/null 2>&1; then echo "no aarch64 musl build of delta upstream" >&2; return 1; fi
+  local ver target
+  ver="$(gh_latest_tag dandavison/delta)" || return 1
+  # no aarch64 musl build upstream; the gnu one is used there
+  case "$UNAME_ARCH" in
+    x86_64)  target=x86_64-unknown-linux-musl ;;
+    aarch64) target=aarch64-unknown-linux-gnu ;;
+  esac
+  install_from_tarball "https://github.com/dandavison/delta/releases/download/${ver}/delta-${ver}-${target}.tar.gz" delta
+}
+</script>
+
+<script type="text/plain" data-snip="dust-bin">
+install_dust() {
+  have dust && { echo "    already installed"; return 0; }
+  local ver target
+  ver="$(gh_latest_tag bootandy/dust)" || return 1
+  target=${UNAME_ARCH}-unknown-linux-musl
+  install_from_tarball "https://github.com/bootandy/dust/releases/download/v${ver}/dust-v${ver}-${target}.tar.gz" dust
+}
+</script>
+
+<script type="text/plain" data-snip="duf-bin">
+install_duf() {
+  have duf && { echo "    already installed"; return 0; }
+  local ver arch
+  ver="$(gh_latest_tag muesli/duf)" || return 1
+  case "$UNAME_ARCH" in x86_64) arch=x86_64 ;; aarch64) arch=arm64 ;; esac
+  install_from_tarball "https://github.com/muesli/duf/releases/download/v${ver}/duf_${ver}_linux_${arch}.tar.gz" duf
+}
+</script>
+
+<script type="text/plain" data-snip="sd-bin">
+install_sd() {
+  have sd && { echo "    already installed"; return 0; }
+  local ver target
+  ver="$(gh_latest_tag chmln/sd)" || return 1
+  target=${UNAME_ARCH}-unknown-linux-musl
+  install_from_tarball "https://github.com/chmln/sd/releases/download/v${ver}/sd-v${ver}-${target}.tar.gz" sd
+}
+</script>
+
+<script type="text/plain" data-snip="hyperfine-bin">
+install_hyperfine() {
+  have hyperfine && { echo "    already installed"; return 0; }
+  local ver target
+  ver="$(gh_latest_tag sharkdp/hyperfine)" || return 1
+  target=${UNAME_ARCH}-unknown-linux-musl
+  install_from_tarball "https://github.com/sharkdp/hyperfine/releases/download/v${ver}/hyperfine-v${ver}-${target}.tar.gz" hyperfine
+}
+</script>
+
+<script type="text/plain" data-snip="btop-bin">
+install_btop() {
+  have btop && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag aristocratos/btop)" || return 1
+  install_from_tarball "https://github.com/aristocratos/btop/releases/download/v${ver}/btop-${UNAME_ARCH}-unknown-linux-musl.tar.gz" btop
+}
+</script>
+
+<script type="text/plain" data-snip="tealdeer-bin">
+install_tealdeer() {
+  have tldr && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag tealdeer-rs/tealdeer)" || return 1
+  curl -fsSL "https://github.com/tealdeer-rs/tealdeer/releases/download/v${ver}/tealdeer-linux-${UNAME_ARCH}-musl" -o "$BIN_DIR/tldr" \
+    && chmod +x "$BIN_DIR/tldr"
+}
+</script>
+
+<script type="text/plain" data-snip="ncdu-bin">
+install_ncdu() {
+  have ncdu && { echo "    already installed"; return 0; }
+  local ver
+  # ncdu is not released on GitHub: read the newest version from the author's download page
+  ver="$(curl -fsSL https://dev.yorhel.nl/ncdu | grep -o "ncdu-[0-9][0-9.]*-linux-${UNAME_ARCH}\.tar\.gz" | sed 's/^ncdu-//; s/-linux.*//' | sort -V | tail -n1)"
+  [ -n "$ver" ] || { echo "could not resolve the latest ncdu version" >&2; return 1; }
+  install_from_tarball "https://dev.yorhel.nl/download/ncdu-${ver}-linux-${UNAME_ARCH}.tar.gz" ncdu
+}
+</script>
+
+<script type="text/plain" data-snip="starship-bin">
+install_starship() {
+  have starship && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag starship/starship)" || return 1
+  install_from_tarball "https://github.com/starship/starship/releases/download/v${ver}/starship-${UNAME_ARCH}-unknown-linux-musl.tar.gz" starship
+}
+</script>
+
+<script type="text/plain" data-snip="direnv-bin">
+install_direnv() {
+  have direnv && { echo "    already installed"; return 0; }
+  curl -fsSL "https://github.com/direnv/direnv/releases/latest/download/direnv.linux-${GO_ARCH}" -o "$BIN_DIR/direnv" \
+    && chmod +x "$BIN_DIR/direnv"
+}
+</script>
+
+<script type="text/plain" data-snip="atuin-bin">
+install_atuin() {
+  have atuin && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag atuinsh/atuin)" || return 1
+  install_from_tarball "https://github.com/atuinsh/atuin/releases/download/v${ver}/atuin-${UNAME_ARCH}-unknown-linux-musl.tar.gz" atuin
+}
+</script>
+
+<script type="text/plain" data-snip="just-bin">
+install_just() {
+  have just && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag casey/just)" || return 1
+  install_from_tarball "https://github.com/casey/just/releases/download/${ver}/just-${ver}-${UNAME_ARCH}-unknown-linux-musl.tar.gz" just
+}
+</script>
+
+<script type="text/plain" data-snip="mise-bin">
+install_mise() {
+  have mise && { echo "    already installed"; return 0; }
+  local ver arch
+  ver="$(gh_latest_tag jdx/mise)" || return 1
+  case "$UNAME_ARCH" in x86_64) arch=x64 ;; aarch64) arch=arm64 ;; esac
+  curl -fsSL "https://github.com/jdx/mise/releases/download/v${ver}/mise-v${ver}-linux-${arch}-musl" -o "$BIN_DIR/mise" \
+    && chmod +x "$BIN_DIR/mise"
+}
+</script>
+
+<script type="text/plain" data-snip="shellcheck-bin">
+install_shellcheck() {
+  have shellcheck && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag koalaman/shellcheck)" || return 1
+  install_from_tarball "https://github.com/koalaman/shellcheck/releases/download/v${ver}/shellcheck-v${ver}.linux.${UNAME_ARCH}.tar.gz" shellcheck
+}
+</script>
+
+<script type="text/plain" data-snip="precommit-uv">
+install_precommit() {
+  have pre-commit && { echo "    already installed"; return 0; }
+  have uv || { echo "uv not found" >&2; return 1; }
+  uv tool install pre-commit
+}
+</script>
+
+<script type="text/plain" data-snip="xh-bin">
+install_xh() {
+  have xh && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag ducaale/xh)" || return 1
+  install_from_tarball "https://github.com/ducaale/xh/releases/download/v${ver}/xh-v${ver}-${UNAME_ARCH}-unknown-linux-musl.tar.gz" xh
+}
+</script>
+
+<script type="text/plain" data-snip="neovim-tarball">
+install_neovim() {
+  have nvim && { echo "    already installed"; return 0; }
+  local arch tmp rc=1 opt="$HOME/.local/opt"
+  case "$UNAME_ARCH" in x86_64) arch=x86_64 ;; aarch64) arch=arm64 ;; esac
+  # neovim/neovim-releases = same release, built against an older glibc (works on Amazon Linux 2);
+  # still glibc only, so Alpine installs the distro package instead
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://github.com/neovim/neovim-releases/releases/latest/download/nvim-linux-${arch}.tar.gz" -o "$tmp/nvim.tgz" \
+     && tar -xzf "$tmp/nvim.tgz" -C "$tmp"; then
+    mkdir -p "$opt" && rm -rf "$opt/nvim" \
+      && mv "$tmp/nvim-linux-${arch}" "$opt/nvim" \
+      && ln -sf "$opt/nvim/bin/nvim" "$BIN_DIR/nvim" && rc=0
+  fi
+  rm -rf "$tmp"
+  if [ $rc -eq 0 ] && ! "$BIN_DIR/nvim" --version >/dev/null 2>&1; then
+    echo "nvim does not run on this system (glibc too old?)" >&2
+    rm -rf "$opt/nvim" "$BIN_DIR/nvim"; rc=1
+  fi
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="zellij-bin">
+install_zellij() {
+  have zellij && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag zellij-org/zellij)" || return 1
+  install_from_tarball "https://github.com/zellij-org/zellij/releases/download/v${ver}/zellij-${UNAME_ARCH}-unknown-linux-musl.tar.gz" zellij
+}
+</script>
+
+<script type="text/plain" data-snip="yazi-bin">
+install_yazi() {
+  have yazi && { echo "    already installed"; return 0; }
+  local tmp rc=1 dir
+  have unzip || { echo "unzip not found" >&2; return 1; }
+  dir="yazi-${UNAME_ARCH}-unknown-linux-musl"
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://github.com/sxyazi/yazi/releases/latest/download/${dir}.zip" -o "$tmp/yazi.zip" \
+     && unzip -q "$tmp/yazi.zip" -d "$tmp"; then
+    install -m 0755 "$tmp/$dir/yazi" "$BIN_DIR/yazi" \
+      && install -m 0755 "$tmp/$dir/ya" "$BIN_DIR/ya" && rc=0
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="node-nvm">
+install_node() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  local ver nvm_rc node_bin
+  # an existing nvm: load it first, so its default node counts and nothing is installed over it
+  # (nvm.sh is not safe under `set -u`)
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    set +u
+    # shellcheck source=/dev/null
+    . "$NVM_DIR/nvm.sh"
+    set -u
+  fi
+  have node && { echo "    already installed"; return 0; }
+  ver="$(gh_latest_tag nvm-sh/nvm)" || return 1
+  # current Node builds link against libatomic, which minimal images lack
+  if ! ldconfig -p 2>/dev/null | grep -q 'libatomic\.so\.1'; then
+    if have apt-get || have zypper; then pm_install libatomic1
+    elif have dnf || have yum; then pm_install libatomic
+    fi
+  fi
+  # PROFILE=/dev/null: the installer must not edit rc files (the shell setup step does that)
+  curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/v${ver}/install.sh" | PROFILE=/dev/null bash || return 1
+  set +u
+  # shellcheck source=/dev/null
+  . "$NVM_DIR/nvm.sh" && nvm install --lts; nvm_rc=$?
+  # make it the default only if there is no default yet
+  if [ "$nvm_rc" -eq 0 ] && [ ! -e "$NVM_DIR/alias/default" ]; then nvm alias default 'lts/*' >/dev/null; fi
+  # the version just installed (`nvm which current` needs the `which` command, missing on Fedora/Rocky images)
+  node_bin="$(nvm which 'lts/*' 2>/dev/null)"
+  set -u
+  [ "$nvm_rc" -eq 0 ] && [ -x "$node_bin" ] || return 1
+  # put node on PATH for the rest of this script (the final check needs it)
+  PATH="$(dirname "$node_bin"):$PATH"; export PATH
+  node --version >/dev/null || { echo "node was installed but does not run on this system (glibc too old?)" >&2; return 1; }
+}
+</script>
+
+<script type="text/plain" data-snip="bun-zip">
+install_bun() {
+  have bun && { echo "    already installed"; return 0; }
+  have unzip || { echo "unzip not found" >&2; return 1; }
+  local arch musl="" tmp rc=1
+  case "$UNAME_ARCH" in x86_64) arch=x64 ;; aarch64) arch=aarch64 ;; esac
+  if ls /lib/ld-musl-* >/dev/null 2>&1; then
+    musl="-musl"
+    # bun's musl build links against the C++ runtime, which Alpine does not ship by default
+    $SUDO apk add --no-cache libgcc libstdc++ || return 1
+  fi
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-${arch}${musl}.zip" -o "$tmp/bun.zip" \
+     && unzip -q "$tmp/bun.zip" -d "$tmp"; then
+    install -m 0755 "$tmp/bun-linux-${arch}${musl}/bun" "$BIN_DIR/bun" && rc=0
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="deno-zip">
+install_deno() {
+  have deno && { echo "    already installed"; return 0; }
+  have unzip || { echo "unzip not found" >&2; return 1; }
+  local tmp rc=1
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://github.com/denoland/deno/releases/latest/download/deno-${UNAME_ARCH}-unknown-linux-gnu.zip" -o "$tmp/deno.zip" \
+     && unzip -q "$tmp/deno.zip" -d "$tmp"; then
+    install -m 0755 "$tmp/deno" "$BIN_DIR/deno" && rc=0
+  fi
+  rm -rf "$tmp"
+  # the glibc build will not start on very old systems (e.g. Amazon Linux 2)
+  [ "$rc" -eq 0 ] && { "$BIN_DIR/deno" --version >/dev/null 2>&1 || { echo "deno does not run on this system (glibc too old?)" >&2; rm -f "$BIN_DIR/deno"; rc=1; }; }
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="opentofu-bin">
+install_opentofu() {
+  have tofu && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag opentofu/opentofu)" || return 1
+  install_from_tarball "https://github.com/opentofu/opentofu/releases/download/v${ver}/tofu_${ver}_linux_${GO_ARCH}.tar.gz" tofu
+}
+</script>
+
+<script type="text/plain" data-snip="terraform-bin">
+install_terraform() {
+  have terraform && { echo "    already installed"; return 0; }
+  local ver tmp rc=1
+  ver="$(curl -fsSL https://checkpoint-api.hashicorp.com/v1/check/terraform \
+    | sed -n 's/.*"current_version" *: *"\([^"]*\)".*/\1/p')"
+  [ -n "$ver" ] || { echo "could not resolve the latest Terraform version" >&2; return 1; }
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://releases.hashicorp.com/terraform/${ver}/terraform_${ver}_linux_${GO_ARCH}.zip" -o "$tmp/tf.zip" \
+     && unzip -q -o "$tmp/tf.zip" terraform -d "$tmp"; then
+    install -m 0755 "$tmp/terraform" "$BIN_DIR/terraform" && rc=0
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="awscli-zip">
+install_awscli() {
+  local tmp cur="" rc=1
+  if have aws; then
+    cur="$(aws --version 2>&1)"
+    case "$cur" in aws-cli/2*) echo "    already installed"; return 0 ;; esac
+    echo "    found ${cur%% *} at $(command -v aws); installing AWS CLI v2 as $BIN_DIR/aws"
+  fi
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${UNAME_ARCH}.zip" -o "$tmp/awscliv2.zip" \
+     && unzip -q "$tmp/awscliv2.zip" -d "$tmp"; then
+    "$tmp/aws/install" --update -i "$HOME/.local/aws-cli" -b "$BIN_DIR" && rc=0
+  fi
+  rm -rf "$tmp"
+  hash -r
+  [ "$rc" -eq 0 ] || return 1
+  case "$("$BIN_DIR/aws" --version 2>&1)" in aws-cli/2*) ;; *) echo "$BIN_DIR/aws is not AWS CLI v2" >&2; return 1 ;; esac
+  if [ -n "$cur" ]; then
+    # v1 stays where it was (unless it was $BIN_DIR/aws itself, which the v2 link replaces)
+    echo "    NOTE: v1 is still installed; v2 wins only while $BIN_DIR comes first on your PATH"
+    echo "          (the 'Wire up my shell' PATH line puts it first)"
+  fi
+}
+</script>
+
+<script type="text/plain" data-snip="ansible-uv">
+install_ansible() {
+  have ansible && { echo "    already installed"; return 0; }
+  have uv || { echo "uv not found" >&2; return 1; }
+  # ansible-core needs Python 3.13+; pin it so uv doesn't pick a pre-release interpreter
+  uv tool install --python 3.13 --with-executables-from ansible-core ansible
+}
+</script>
+
+<script type="text/plain" data-snip="kubectx-bin">
+install_kubectx() {
+  have kubectx && have kubens && { echo "    already installed"; return 0; }
+  local ver arch
+  ver="$(gh_latest_tag ahmetb/kubectx)" || return 1
+  case "$UNAME_ARCH" in x86_64) arch=x86_64 ;; aarch64) arch=arm64 ;; esac
+  install_from_tarball "https://github.com/ahmetb/kubectx/releases/download/v${ver}/kubectx_v${ver}_linux_${arch}.tar.gz" kubectx \
+    && install_from_tarball "https://github.com/ahmetb/kubectx/releases/download/v${ver}/kubens_v${ver}_linux_${arch}.tar.gz" kubens
+}
+</script>
+
+<script type="text/plain" data-snip="gitlfs-bin">
+install_gitlfs() {
+  have git-lfs && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag git-lfs/git-lfs)" || return 1
+  install_from_tarball "https://github.com/git-lfs/git-lfs/releases/download/v${ver}/git-lfs-linux-${GO_ARCH}-v${ver}.tar.gz" git-lfs
+}
+</script>
+
+<script type="text/plain" data-snip="duckdb-bin">
+install_duckdb() {
+  have duckdb && { echo "    already installed"; return 0; }
+  local ver libc=""
+  ver="$(gh_latest_tag duckdb/duckdb)" || return 1
+  # the musl build still links libstdc++ dynamically
+  if ls /lib/ld-musl-* >/dev/null 2>&1; then libc="-musl"; pm_install libstdc++ || return 1; fi
+  install_from_tarball "https://github.com/duckdb/duckdb/releases/download/v${ver}/duckdb-cli-linux-${GO_ARCH}${libc}.tar.gz" duckdb
+}
+</script>
+
+<script type="text/plain" data-snip="pandoc-bin">
+install_pandoc() {
+  have pandoc && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag jgm/pandoc)" || return 1
+  install_from_tarball "https://github.com/jgm/pandoc/releases/download/${ver}/pandoc-${ver}-linux-${GO_ARCH}.tar.gz" pandoc
+}
+</script>
+
+<script type="text/plain" data-snip="mkcert-bin">
+install_mkcert() {
+  have mkcert && { echo "    already installed"; return 0; }
+  local ver
+  ver="$(gh_latest_tag FiloSottile/mkcert)" || return 1
+  curl -fsSL "https://github.com/FiloSottile/mkcert/releases/download/v${ver}/mkcert-v${ver}-linux-${GO_ARCH}" -o "$BIN_DIR/mkcert" \
+    && chmod +x "$BIN_DIR/mkcert"
+}
+</script>
+
+<script type="text/plain" data-snip="java-sdkman">
+install_java() {
+  local init="$HOME/.sdkman/bin/sdkman-init.sh" rc
+  # an existing SDKMAN: load it first, so its java counts and nothing is installed over it
+  # (sdkman-init.sh is not safe under `set -u`)
+  if [ -s "$init" ]; then
+    set +u
+    # shellcheck source=/dev/null
+    . "$init"
+    set -u
+  fi
+  have java && { echo "    already installed"; return 0; }
+  # SDKMAN needs zip as well as unzip, curl and bash
+  have zip || pm_install zip || return 1
+  if [ ! -s "$init" ]; then
+    curl -fsSL "https://get.sdkman.io?rcupdate=false" | bash || return 1
+  fi
+  set +u
+  # shellcheck source=/dev/null
+  . "$init"
+  # no prompts, for this run only: your SDKMAN config is left as it is (sdk re-reads it on every
+  # call, so stdin from /dev/null is what really answers "set as default?" with its default, yes)
+  sdkman_auto_answer=true sdkman_auto_selfupdate=false sdk install java </dev/null; rc=$?
+  set -u
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="7zip-bin">
+# Official 7-Zip release (ip7z/7zip): a static `7zz`. Distros disagree on 7z/7za/7zz, so we always use this one.
+install_7zip() {
+  have 7zz && { echo "    already installed"; return 0; }
+  local ver arch tmp rc=1
+  ver="$(gh_latest_tag ip7z/7zip)" || return 1
+  case "$UNAME_ARCH" in x86_64) arch=x64 ;; aarch64) arch=arm64 ;; esac
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://github.com/ip7z/7zip/releases/download/${ver}/7z${ver//./}-linux-${arch}.tar.xz" -o "$tmp/pkg.txz" \
+     && tar -xJf "$tmp/pkg.txz" -C "$tmp" 7zz; then
+    install -m 0755 "$tmp/7zz" "$BIN_DIR/7zz" && rc=0
+  else
+    echo "could not download or unpack 7-Zip (is xz installed?)" >&2
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="rc-head">
+case "$(basename "${SHELL:-/bin/bash}")" in
+  zsh) RC="$HOME/.zshrc" ;;
+  *)   RC="$HOME/.bashrc" ;;
+esac
+touch "$RC"
+echo "    rc file: $RC"
+</script>
+
+<script type="text/plain" data-snip="rc-path">
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
+</script>
+
+<script type="text/plain" data-snip="rc-zoxide">
+if command -v zoxide >/dev/null 2>&1; then
+  if [ -n "${ZSH_VERSION:-}" ]; then eval "$(zoxide init zsh)"; else eval "$(zoxide init bash)"; fi
+fi
+</script>
+
+<script type="text/plain" data-snip="rc-fzf">
+if command -v fzf >/dev/null 2>&1; then
+  if [ -n "${ZSH_VERSION:-}" ]; then _fzf_sh=zsh; else _fzf_sh=bash; fi
+  if fzf --"$_fzf_sh" >/dev/null 2>&1; then
+    eval "$(fzf --"$_fzf_sh")"
+  elif [ -f "/usr/share/doc/fzf/examples/key-bindings.$_fzf_sh" ]; then
+    . "/usr/share/doc/fzf/examples/key-bindings.$_fzf_sh"
+  fi
+  unset _fzf_sh
+fi
+</script>
+
+<script type="text/plain" data-snip="rc-clipcat">
+# clipcat <file>: copy a file to your local clipboard, even over SSH (OSC 52)
+clipcat() { base64 -w0 "$1" | sed 's/.*/\x1b]52;c;&\x07/' > /dev/tty; }
+</script>
+
+<script type="text/plain" data-snip="rc-act">
+# act: activate the nearest .venv, walking up from $PWD
+act() {
+  local dir="$PWD"
+  while [ "$dir" != "/" ]; do
+    if [ -f "$dir/.venv/bin/activate" ]; then
+      . "$dir/.venv/bin/activate"
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+  echo "No .venv found in $PWD or any parent directory." >&2
+  return 1
+}
+</script>
+
+<script type="text/plain" data-snip="rc-starship">
+if command -v starship >/dev/null 2>&1; then
+  if [ -n "${ZSH_VERSION:-}" ]; then eval "$(starship init zsh)"; else eval "$(starship init bash)"; fi
+fi
+</script>
+
+<script type="text/plain" data-snip="rc-direnv">
+if command -v direnv >/dev/null 2>&1; then
+  if [ -n "${ZSH_VERSION:-}" ]; then eval "$(direnv hook zsh)"; else eval "$(direnv hook bash)"; fi
+fi
+</script>
+
+<script type="text/plain" data-snip="rc-atuin">
+# atuin takes over Ctrl-R and the Up arrow (it loads after fzf, so it wins Ctrl-R)
+if command -v atuin >/dev/null 2>&1; then
+  if [ -n "${ZSH_VERSION:-}" ]; then eval "$(atuin init zsh)"; else eval "$(atuin init bash)"; fi
+fi
+</script>
+
+<script type="text/plain" data-snip="rc-mise">
+if command -v mise >/dev/null 2>&1; then
+  if [ -n "${ZSH_VERSION:-}" ]; then eval "$(mise activate zsh)"; else eval "$(mise activate bash)"; fi
+fi
+</script>
+
+<script type="text/plain" data-snip="rc-node">
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && [ -n "${BASH_VERSION:-}" ] && . "$NVM_DIR/bash_completion"
+</script>
+
+<script type="text/plain" data-snip="rc-mkcd">
+# mkcd <dir>: make a directory (and parents) and cd into it
+mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
+</script>
+
+<script type="text/plain" data-snip="rc-extract">
+# extract <file>...: unpack almost any archive by its extension
+extract() {
+  [ "$#" -gt 0 ] || { echo "usage: extract <archive>..." >&2; return 2; }
+  local f need c rc=0
+  for f in "$@"; do
+    [ -f "$f" ] || { echo "extract: '$f' is not a file" >&2; rc=1; continue; }
+    case "$f" in
+      *.tar.gz|*.tgz)    need=tar ;;
+      *.tar.bz2|*.tbz2)  need=tar ;;
+      *.tar.xz|*.txz)    need=tar ;;
+      *.tar.zst)         need=zstd ;;
+      *.tar)             need=tar ;;
+      *.gz)              need=gunzip ;;
+      *.bz2)             need=bunzip2 ;;
+      *.xz)              need=unxz ;;
+      *.zst)             need=unzstd ;;
+      *.zip)             need=unzip ;;
+      *.7z)              need=7zz; for c in 7zz 7z 7za; do command -v "$c" >/dev/null 2>&1 && { need=$c; break; }; done ;;
+      *.rar)             need=7zz; for c in 7zz 7z unrar; do command -v "$c" >/dev/null 2>&1 && { need=$c; break; }; done ;;
+      *) echo "extract: don't know how to unpack '$f'" >&2; rc=1; continue ;;
+    esac
+    command -v "$need" >/dev/null 2>&1 || { echo "extract: '$need' is needed for '$f' but is not installed" >&2; rc=1; continue; }
+    case "$f" in
+      *.tar.gz|*.tgz)   tar -xzf "$f" ;;
+      *.tar.bz2|*.tbz2) tar -xjf "$f" ;;
+      *.tar.xz|*.txz)   tar -xJf "$f" ;;
+      *.tar.zst)        zstd -dc -- "$f" | tar -xf - ;;
+      *.tar)            tar -xf "$f" ;;
+      *.gz)             gunzip -k -- "$f" ;;
+      *.bz2)            bunzip2 -k -- "$f" ;;
+      *.xz)             unxz -k -- "$f" ;;
+      *.zst)            unzstd -q -- "$f" ;;
+      *.zip)            unzip -q "$f" ;;
+      *.7z|*.rar)       "$need" x "$f" ;;
+    esac || rc=1
+  done
+  return $rc
+}
+</script>
+
+<script type="text/plain" data-snip="rc-serve">
+# serve [port]: serve the current directory over HTTP (needs python3)
+serve() { python3 -m http.server "${1:-8000}"; }
+</script>
+
+<script type="text/plain" data-snip="rc-java">
+export SDKMAN_DIR="$HOME/.sdkman"
+if [ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
+  . "$SDKMAN_DIR/bin/sdkman-init.sh"
+fi
+</script>
+
+<script type="text/plain" data-snip="docker-group">
+if have docker && [ "$(id -u)" -ne 0 ] && ! id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
+  if have usermod; then $SUDO usermod -aG docker "$USER"; else $SUDO addgroup "$USER" docker; fi \
+    && echo "    added $USER to the docker group (log out and back in to use docker without sudo)"
+fi
+</script>
+
+<!-- ===================== app ===================== -->
+<script>
+(function () {
+  "use strict";
+
+  const SNIP = {};
+  document.querySelectorAll('script[data-snip]').forEach(el => {
+    SNIP[el.dataset.snip] = el.textContent.replace(/^\n/, "").replace(/\s+$/, "");
+  });
+  const snip = k => { if (!(k in SNIP)) throw new Error("missing snippet " + k); return SNIP[k]; };
+
+  // ---------- version ----------
+  // build-site.sh replaces the placeholder with the release tag; anything else is a dev build.
+  const APP_VERSION = "__APP_VERSION__";
+  const VERSION = /^v\d+\.\d+\.\d+$/.test(APP_VERSION) ? APP_VERSION : "dev";
+  const SITE = "https://magnus167.github.io/dev-tools-installer/";
+  const SITE_HERE = VERSION === "dev" ? SITE : SITE + VERSION + "/";
+
+  // ---------- package managers ----------
+  // PM keys are the combo-ID prefix: never rename them. PM_SHOWN is display order only.
+  const PM_ORDER = ["apt", "dnf", "yum", "apk", "pacman", "zypper"];
+  const PM_SHOWN = ["apt", "dnf", "apk", "pacman", "zypper", "yum"];
+  const PM = {
+    apt:    { distros: "Debian, Ubuntu, Mint",
+              refresh: "$SUDO apt-get update -y",
+              install: '$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"',
+              base: "curl ca-certificates tar gzip unzip xz-utils", build: "build-essential pkg-config libssl-dev" },
+    dnf:    { distros: "Fedora, RHEL 8+, Rocky, Alma",
+              refresh: ":",
+              // strict=0: skip packages a distro lacks (Rocky/Alma have no htop, entr or ffmpeg-free
+              // without EPEL) instead of failing the whole batch; the final check still reports them
+              install: '$SUDO dnf install -y --setopt=strict=0 "$@"',
+              base: "curl ca-certificates tar gzip unzip xz", build: "gcc gcc-c++ make pkgconf-pkg-config openssl-devel" },
+    yum:    { label: "yum (legacy)", distros: "CentOS/RHEL 7, Amazon Linux 2 — end of life",
+              refresh: ":",
+              install: '$SUDO yum install -y "$@"',
+              base: "curl ca-certificates tar gzip unzip xz", build: "gcc gcc-c++ make pkgconfig openssl-devel" },
+    apk:    { distros: "Alpine",
+              refresh: "$SUDO apk update",
+              install: '$SUDO apk add "$@"',
+              base: "bash curl ca-certificates tar gzip unzip xz", build: "build-base pkgconf openssl-dev" },
+    pacman: { distros: "Arch, Manjaro, EndeavourOS",
+              refresh: "$SUDO pacman -Syu --noconfirm",
+              install: '$SUDO pacman -S --noconfirm --needed "$@"',
+              base: "curl ca-certificates tar gzip unzip xz", build: "base-devel pkgconf openssl" },
+    zypper: { distros: "openSUSE, SLES",
+              refresh: "$SUDO zypper --non-interactive --gpg-auto-import-keys refresh",
+              install: '$SUDO zypper --non-interactive install "$@"',
+              base: "curl ca-certificates tar gzip unzip xz", build: "gcc gcc-c++ make pkg-config libopenssl-devel" },
+  };
+
+  // How a fallback snippet shows up in the "via" badge
+  const VIA = {
+    "docker-get": "get.docker.com", "docker-dnf": "get.docker.com", "docker-yum": "installer", "ripgrep-bin": "binary", "fzf-bin": "binary", "jq-bin": "binary",
+    "uv-script": "installer", "rust-script": "rustup", "go-tarball": "go.dev", "zoxide-script": "installer",
+    "lazygit-bin": "binary", "lazydocker-bin": "binary", "bottom-deb": ".deb", "bottom-bin": "binary",
+    "glow-bin": "binary", "yq-bin": "binary", "gron-bin": "binary", "jnv-cargo": "cargo",
+    "harlequin-uv": "uv tool", "visidata-uv": "uv tool",
+    "apptainer-deb": ".deb", "apptainer-dnf": "EPEL",
+    "kubectl-bin": "binary", "k9s-bin": "binary", "helm-bin": "binary", "kind-bin": "binary", "dive-bin": "binary",
+    "fd-bin": "binary", "bat-bin": "binary", "eza-bin": "binary", "delta-bin": "binary", "dust-bin": "binary",
+    "duf-bin": "binary", "tealdeer-bin": "binary", "sd-bin": "binary", "hyperfine-bin": "binary",
+    "btop-bin": "binary", "ncdu-bin": "binary",
+    "starship-bin": "binary", "direnv-bin": "binary", "atuin-bin": "binary", "just-bin": "binary",
+    "mise-bin": "binary", "shellcheck-bin": "binary", "precommit-uv": "uv tool", "xh-bin": "binary",
+    "neovim-tarball": "binary", "zellij-bin": "binary", "yazi-bin": "binary",
+    "node-nvm": "nvm", "bun-zip": "binary", "deno-zip": "binary",
+    "opentofu-bin": "binary", "terraform-bin": "binary", "awscli-zip": "installer", "ansible-uv": "uv tool",
+    "kubectx-bin": "binary", "gitlfs-bin": "binary", "duckdb-bin": "binary", "pandoc-bin": "binary",
+    "java-sdkman": "SDKMAN", "mkcert-bin": "binary",
+    "7zip-bin": "binary",
+  };
+
+  // ---------- tool registry ----------
+  // ORDER IS THE COMBO ENCODING: only ever append to this list, never reorder or delete.
+  const ALL = (pkg) => Object.fromEntries(PM_ORDER.map(p => [p, pkg]));
+  const TOOLS = [
+    { id: "git", name: "git", bin: "git", group: "Essentials", desc: "Version control.", native: ALL("git") },
+    { id: "python", name: "python3 + pip", bin: "python3", group: "Essentials", desc: "Python 3 with pip and venv.",
+      native: { apt: "python3 python3-pip python3-venv", dnf: "python3 python3-pip", yum: "python3 python3-pip",
+                apk: "python3 py3-pip", pacman: "python python-pip", zypper: "python3 python3-pip" } },
+    { id: "docker", name: "docker", bin: "docker", group: "Essentials", desc: "Containers, with the compose plugin.",
+      native: { apk: "docker docker-cli-compose", pacman: "docker docker-compose", zypper: "docker docker-compose" },
+      post: { apk: "docker-post-openrc", pacman: "docker-post-systemd", zypper: "docker-post-systemd" },
+      fn: { dnf: "docker-dnf", yum: "docker-yum", "*": "docker-get" }, noFallback: ["apk"] },
+    { id: "gh", name: "gh", bin: "gh", group: "Essentials", desc: "GitHub CLI, from GitHub’s own repo where needed.",
+      native: { apt: "gh", dnf: "gh", yum: "gh", apk: "github-cli", pacman: "github-cli", zypper: "gh" },
+      pre: { apt: "gh-repo-apt", dnf: "gh-repo-dnf", yum: "gh-repo-yum", zypper: "gh-repo-zypper" } },
+    { id: "ripgrep", name: "ripgrep", bin: "rg", group: "Search and data", desc: "grep, but absurdly fast.",
+      native: { apt: "ripgrep", apk: "ripgrep", pacman: "ripgrep", zypper: "ripgrep" }, fn: { "*": "ripgrep-bin" } },
+    { id: "fzf", name: "fzf", bin: "fzf", group: "Search and data", desc: "Fuzzy finder that pipes into everything.",
+      native: { apt: "fzf", apk: "fzf", pacman: "fzf", zypper: "fzf" }, fn: { "*": "fzf-bin" }, init: "rc-fzf" },
+    { id: "jq", name: "jq", bin: "jq", group: "Search and data", desc: "JSON Swiss Army knife.",
+      native: { apt: "jq", dnf: "jq", apk: "jq", pacman: "jq", zypper: "jq" }, fn: { "*": "jq-bin" } },
+    { id: "uv", name: "uv", bin: "uv", group: "Languages", desc: "Fast Python package and project manager.", fn: { "*": "uv-script" } },
+    { id: "rust", name: "rust + cargo", bin: "cargo", group: "Languages", desc: "The Rust toolchain, via rustup.", build: true, fn: { "*": "rust-script" } },
+    { id: "go", name: "go", bin: "go", group: "Languages", desc: "The Go toolchain.",
+      native: { apk: "go", pacman: "go" }, fn: { "*": "go-tarball" } },
+    { id: "zoxide", name: "zoxide", bin: "zoxide", group: "Shell", desc: "cd that learns your habits: z proj jumps there.",
+      native: { apk: "zoxide", pacman: "zoxide" }, fn: { "*": "zoxide-script" }, init: "rc-zoxide", initLast: true },
+    { id: "lazygit", name: "lazygit", bin: "lazygit", group: "Terminal apps", desc: "Terminal UI for git.",
+      native: { apk: "lazygit", pacman: "lazygit" }, fn: { "*": "lazygit-bin" } },
+    { id: "lazydocker", name: "lazydocker", bin: "lazydocker", group: "Terminal apps", desc: "Terminal UI for docker.", fn: { "*": "lazydocker-bin" } },
+    { id: "bottom", name: "bottom", bin: "btm", group: "Terminal apps", desc: "System and process monitor.",
+      native: { apk: "bottom", pacman: "bottom" }, fn: { apt: "bottom-deb", "*": "bottom-bin" }, noFallback: ["apk"] },
+    { id: "glow", name: "glow", bin: "glow", group: "Terminal apps", desc: "Render markdown in the terminal.",
+      native: { pacman: "glow" }, fn: { "*": "glow-bin" } },
+    { id: "yq", name: "yq", bin: "yq", group: "Search and data", desc: "jq, but for YAML.", fn: { "*": "yq-bin" } },
+    { id: "gron", name: "gron", bin: "gron", group: "Search and data", desc: "Flattens JSON so you can grep it.", fn: { "*": "gron-bin" } },
+    { id: "jnv", name: "jnv", bin: "jnv", group: "Search and data", desc: "Interactive jq REPL.", build: true, requires: ["rust"], fn: { "*": "jnv-cargo" } },
+    { id: "harlequin", name: "harlequin", bin: "harlequin", group: "Terminal apps", desc: "SQL IDE in the terminal (DuckDB, Postgres and more).", requires: ["uv"], fn: { "*": "harlequin-uv" },
+      skip: { apk: "its DuckDB dependency has no Alpine (musl) build",
+              yum: "its pyarrow dependency needs a newer glibc than CentOS 7 or Amazon Linux 2 have" } },
+    { id: "visidata", name: "visidata", bin: "vd", group: "Terminal apps", desc: "Spreadsheet TUI for any tabular file.", requires: ["uv"], fn: { "*": "visidata-uv" } },
+    { id: "clipcat", name: "clipcat", group: "Shell", desc: "Copy a file to your local clipboard, even over SSH.", rc: "rc-clipcat" },
+    { id: "act", name: "act", group: "Shell", desc: "Activate the nearest .venv from anywhere in a project.", rc: "rc-act" },
+    // ---- v1.0.0 additions (appended; same rule) ----
+    // containers
+    { id: "podman", name: "podman", bin: "podman", group: "Containers", desc: "Daemonless, rootless containers.",
+      native: { apt: "podman", dnf: "podman", apk: "podman", pacman: "podman", zypper: "podman" },
+      skip: { yum: "not packaged for CentOS 7 or Amazon Linux 2" } },
+    { id: "apptainer", name: "apptainer", bin: "apptainer", group: "Containers", desc: "Containers for HPC and shared machines (formerly Singularity).",
+      native: { apk: "apptainer", pacman: "apptainer", zypper: "apptainer" }, fn: { apt: "apptainer-deb", dnf: "apptainer-dnf" },
+      skip: { yum: "no package or compatible build for CentOS 7 or Amazon Linux 2" } },
+    { id: "kubectl", name: "kubectl", bin: "kubectl", group: "Containers", desc: "Command line for Kubernetes clusters.", fn: { "*": "kubectl-bin" } },
+    { id: "k9s", name: "k9s", bin: "k9s", group: "Containers", desc: "Terminal UI for Kubernetes.",
+      native: { apk: "k9s", pacman: "k9s" }, fn: { "*": "k9s-bin" } },
+    { id: "helm", name: "helm", bin: "helm", group: "Containers", desc: "Package manager for Kubernetes.",
+      native: { apk: "helm", pacman: "helm", zypper: "helm" }, fn: { "*": "helm-bin" } },
+    { id: "kind", name: "kind", bin: "kind", group: "Containers", desc: "Local Kubernetes clusters in docker containers.",
+      native: { pacman: "kind" }, fn: { "*": "kind-bin" } },
+    { id: "dive", name: "dive", bin: "dive", group: "Containers", desc: "Explore the layers of a container image.",
+      native: { pacman: "dive" }, fn: { "*": "dive-bin" } },
+    // modern cli
+    { id: "fd", name: "fd", bin: "fd", group: "Files and text", desc: "find, but friendlier and faster.",
+      native: { apk: "fd", pacman: "fd", zypper: "fd" }, fn: { "*": "fd-bin" } },
+    { id: "bat", name: "bat", bin: "bat", group: "Files and text", desc: "cat with syntax highlighting and git marks.",
+      native: { apk: "bat", pacman: "bat", zypper: "bat" }, fn: { "*": "bat-bin" } },
+    { id: "eza", name: "eza", bin: "eza", group: "Files and text", desc: "ls with colours, icons and git status.",
+      native: { apk: "eza", pacman: "eza", zypper: "eza" }, fn: { "*": "eza-bin" } },
+    { id: "delta", name: "delta", bin: "delta", group: "Files and text", desc: "Readable syntax-highlighted git diffs.",
+      native: { apk: "delta", pacman: "git-delta", zypper: "git-delta" }, fn: { "*": "delta-bin" } },
+    { id: "dust", name: "dust", bin: "dust", group: "Files and text", desc: "du, but as a tree you can read.",
+      native: { apk: "dust", pacman: "dust", zypper: "dust" }, fn: { "*": "dust-bin" } },
+    { id: "duf", name: "duf", bin: "duf", group: "Files and text", desc: "df, but as a tidy table.",
+      native: { apt: "duf", pacman: "duf", zypper: "duf" }, fn: { "*": "duf-bin" } },
+    { id: "tealdeer", name: "tealdeer", bin: "tldr", group: "Files and text", desc: "tldr: short examples instead of man pages.",
+      native: { apt: "tealdeer", pacman: "tealdeer", zypper: "tealdeer" }, fn: { "*": "tealdeer-bin" } },
+    { id: "sd", name: "sd", bin: "sd", group: "Files and text", desc: "sed, but with sane regex syntax.",
+      native: { apt: "sd", apk: "sd", pacman: "sd", zypper: "sd" }, fn: { "*": "sd-bin" } },
+    { id: "hyperfine", name: "hyperfine", bin: "hyperfine", group: "Dev workflow", desc: "Benchmark any command, with stats.",
+      native: { apt: "hyperfine", apk: "hyperfine", pacman: "hyperfine", zypper: "hyperfine" }, fn: { "*": "hyperfine-bin" } },
+    { id: "btop", name: "btop", bin: "btop", group: "Terminal apps", desc: "Pretty CPU, memory, disk and network monitor.",
+      native: { apt: "btop", apk: "btop", pacman: "btop", zypper: "btop" }, fn: { "*": "btop-bin" } },
+    { id: "ncdu", name: "ncdu", bin: "ncdu", group: "Terminal apps", desc: "Browse disk usage and delete what is eating it.",
+      native: { apt: "ncdu", apk: "ncdu", pacman: "ncdu", zypper: "ncdu" }, fn: { "*": "ncdu-bin" } },
+    // shell and workflow
+    { id: "starship", name: "starship", bin: "starship", group: "Shell", desc: "Fast, minimal prompt for any shell.", init: "rc-starship",
+      native: { pacman: "starship" }, fn: { "*": "starship-bin" } },
+    { id: "direnv", name: "direnv", bin: "direnv", group: "Dev workflow", desc: "Loads and unloads env vars per directory.", init: "rc-direnv",
+      native: { apt: "direnv", apk: "direnv", pacman: "direnv", zypper: "direnv" }, fn: { "*": "direnv-bin" } },
+    { id: "atuin", name: "atuin", bin: "atuin", group: "Shell", desc: "Searchable, syncable shell history (takes over Ctrl-R).", init: "rc-atuin",
+      native: { pacman: "atuin" }, fn: { "*": "atuin-bin" } },
+    { id: "just", name: "just", bin: "just", group: "Dev workflow", desc: "A simpler make for project commands.",
+      native: { pacman: "just" }, fn: { "*": "just-bin" } },
+    { id: "mise", name: "mise", bin: "mise", group: "Dev workflow", desc: "One tool for language versions, env vars and tasks.", init: "rc-mise",
+      native: { pacman: "mise" }, fn: { "*": "mise-bin" } },
+    { id: "shellcheck", name: "shellcheck", bin: "shellcheck", group: "Dev workflow", desc: "Linter for shell scripts.",
+      native: { apt: "shellcheck", apk: "shellcheck", pacman: "shellcheck" }, fn: { "*": "shellcheck-bin" } },
+    { id: "precommit", name: "pre-commit", bin: "pre-commit", group: "Dev workflow", desc: "Run linters and formatters on every git commit.", requires: ["uv"], fn: { "*": "precommit-uv" } },
+    { id: "xh", name: "xh", bin: "xh", group: "Dev workflow", desc: "Friendly, fast HTTP client (httpie-style).",
+      native: { apk: "xh", pacman: "xh" }, fn: { "*": "xh-bin" } },
+    // editors and multiplexers
+    { id: "neovim", name: "neovim", bin: "nvim", group: "Terminal apps", desc: "Modern Vim, current release.",
+      native: { apk: "neovim", pacman: "neovim" }, fn: { "*": "neovim-tarball" }, noFallback: ["apk"] },
+    { id: "tmux", name: "tmux", bin: "tmux", group: "Terminal apps", desc: "Terminal multiplexer: sessions that survive a dropped SSH link.", native: ALL("tmux") },
+    { id: "zellij", name: "zellij", bin: "zellij", group: "Terminal apps", desc: "Friendlier terminal multiplexer with built-in layouts.",
+      native: { pacman: "zellij" }, fn: { "*": "zellij-bin" } },
+    { id: "yazi", name: "yazi", bin: "yazi", group: "Terminal apps", desc: "Fast terminal file manager with previews.",
+      native: { pacman: "yazi" }, fn: { "*": "yazi-bin" } },
+    // runtimes and shortcuts
+    { id: "node", name: "node (via nvm)", bin: "node", group: "Languages", desc: "Node.js LTS, managed with nvm.",
+      native: { apk: "nodejs npm" }, fn: { "*": "node-nvm" }, noFallback: ["apk"], init: "rc-node", initAlways: true, initUpstreamOnly: true,
+      skip: { yum: "current Node.js needs a newer glibc than CentOS 7 or Amazon Linux 2 have" } },
+    { id: "bun", name: "bun", bin: "bun", group: "Languages", desc: "Fast JavaScript runtime, bundler and package manager.", fn: { "*": "bun-zip" } },
+    { id: "deno", name: "deno", bin: "deno", group: "Languages", desc: "Secure JavaScript and TypeScript runtime.",
+      native: { apk: "deno" }, fn: { "*": "deno-zip" }, noFallback: ["apk"],
+      skip: { yum: "deno needs a newer glibc than CentOS 7 or Amazon Linux 2 have" } },
+    { id: "mkcd", name: "mkcd", group: "Shell", desc: "mkdir -p and cd in one go.", rc: "rc-mkcd" },
+    { id: "extract", name: "extract", group: "Shell", desc: "Unpack any archive with one command.", rc: "rc-extract" },
+    { id: "serve", name: "serve", group: "Shell", desc: "Serve the current directory over HTTP (needs python3).", rc: "rc-serve" },
+    // infra, cloud and data
+    { id: "opentofu", name: "opentofu", bin: "tofu", group: "Infra and cloud", desc: "Open-source Terraform fork: infrastructure as code.",
+      native: { pacman: "opentofu" }, fn: { "*": "opentofu-bin" } },
+    { id: "terraform", name: "terraform", bin: "terraform", group: "Infra and cloud", desc: "Infrastructure as code, from HashiCorp’s own release.", fn: { "*": "terraform-bin" } },
+    { id: "awscli", name: "aws cli", bin: "aws", group: "Infra and cloud", desc: "AWS command line, v2.",
+      native: { dnf: "awscli2", apk: "aws-cli", pacman: "aws-cli-v2" }, fn: { "*": "awscli-zip" }, noFallback: ["apk"] },
+    { id: "ansible", name: "ansible", bin: "ansible", group: "Infra and cloud", desc: "Agentless automation and config management.", requires: ["uv"], fn: { "*": "ansible-uv" } },
+    { id: "kubectx", name: "kubectx + kubens", bin: "kubectx", group: "Containers", desc: "Switch Kubernetes contexts and namespaces fast.",
+      native: { pacman: "kubectx" }, fn: { "*": "kubectx-bin" } },
+    { id: "gitlfs", name: "git-lfs", bin: "git-lfs", group: "Essentials", desc: "Git extension for large files.",
+      native: { apt: "git-lfs", dnf: "git-lfs", apk: "git-lfs", pacman: "git-lfs", zypper: "git-lfs" }, fn: { "*": "gitlfs-bin" } },
+    { id: "sqlite3", name: "sqlite3", bin: "sqlite3", group: "Data", desc: "SQLite shell.",
+      native: { apt: "sqlite3", dnf: "sqlite", yum: "sqlite", apk: "sqlite", pacman: "sqlite", zypper: "sqlite3" } },
+    { id: "duckdb", name: "duckdb", bin: "duckdb", group: "Data", desc: "Fast analytical SQL on files, in one binary.", fn: { "*": "duckdb-bin" } },
+    { id: "ffmpeg", name: "ffmpeg", bin: "ffmpeg", group: "Data", desc: "Convert, trim and inspect audio and video.",
+      native: { apt: "ffmpeg", dnf: "ffmpeg-free", apk: "ffmpeg", pacman: "ffmpeg" },
+      skip: { yum: "no ffmpeg in the Amazon Linux 2 or CentOS 7 repos",
+              zypper: "Leap ships a stripped ffmpeg 3.4 (a full build needs Packman)" } },
+    { id: "pandoc", name: "pandoc", bin: "pandoc", group: "Data", desc: "Convert documents between markup formats.", fn: { "*": "pandoc-bin" } },
+    { id: "java", name: "java (via SDKMAN)", bin: "java", group: "Languages", desc: "Current Temurin JDK, managed with SDKMAN (Alpine: openjdk21).",
+      native: { apk: "openjdk21" }, fn: { "*": "java-sdkman" }, noFallback: ["apk"], init: "rc-java", initAlways: true, initUpstreamOnly: true },
+    { id: "mkcert", name: "mkcert", bin: "mkcert", group: "Dev workflow", desc: "Locally trusted HTTPS certs for development.",
+      native: { apt: "mkcert", pacman: "mkcert" }, fn: { "*": "mkcert-bin" } },
+    // standard linux utilities
+    { id: "htop", name: "htop", bin: "htop", group: "System", desc: "Interactive process viewer.", native: ALL("htop") },
+    { id: "tree", name: "tree", bin: "tree", group: "System", desc: "Directory listing as a tree.", native: ALL("tree") },
+    { id: "rsync", name: "rsync", bin: "rsync", group: "System", desc: "Fast, resumable file sync and copy.", native: ALL("rsync") },
+    { id: "wget", name: "wget", bin: "wget", group: "System", desc: "Download files from the command line.", native: ALL("wget") },
+    { id: "lsof", name: "lsof", bin: "lsof", group: "System", desc: "Who’s holding that file or port.", native: ALL("lsof") },
+    { id: "strace", name: "strace", bin: "strace", group: "System", desc: "Watch the system calls a program makes.", native: ALL("strace") },
+    { id: "iotop", name: "iotop", bin: "iotop", group: "System", desc: "Which process is hammering the disk.", native: ALL("iotop") },
+    { id: "sysstat", name: "sysstat", bin: "iostat", group: "System", desc: "iostat, mpstat and sar for CPU and disk stats.", native: ALL("sysstat") },
+    { id: "7zip", name: "7zip", bin: "7zz", group: "System", desc: "7z, rar and many other archive formats (as 7zz).",
+      native: { apk: "7zip", zypper: "7zip" }, fn: { "*": "7zip-bin" }, noFallback: ["apk"] },
+    { id: "watch", name: "watch", bin: "watch", group: "System", desc: "Re-run a command every few seconds.",
+      native: { apt: "procps", dnf: "procps-ng", yum: "procps-ng", apk: "procps-ng", pacman: "procps-ng", zypper: "procps" } },
+    { id: "entr", name: "entr", bin: "entr", group: "System", desc: "Run a command whenever files change.",
+      native: { apt: "entr", dnf: "entr", apk: "entr", pacman: "entr", zypper: "entr" },
+      skip: { yum: "not in the Amazon Linux 2 or CentOS 7 repos" } },
+    { id: "nmap", name: "nmap", bin: "nmap", group: "Network", desc: "Scan hosts and open ports.", native: ALL("nmap") },
+    { id: "mtr", name: "mtr", bin: "mtr", group: "Network", desc: "traceroute and ping in one live view.",
+      native: { apt: "mtr-tiny", dnf: "mtr", yum: "mtr", apk: "mtr", pacman: "mtr", zypper: "mtr" } },
+    { id: "traceroute", name: "traceroute", bin: "traceroute", group: "Network", desc: "Show the hops to a host.", native: ALL("traceroute") },
+    { id: "dig", name: "dig", bin: "dig", group: "Network", desc: "Query DNS servers.",
+      native: { apt: "dnsutils", dnf: "bind-utils", yum: "bind-utils", apk: "bind-tools", pacman: "bind", zypper: "bind-utils" } },
+    { id: "whois", name: "whois", bin: "whois", group: "Network", desc: "Look up who owns a domain or IP.", native: ALL("whois") },
+    { id: "tcpdump", name: "tcpdump", bin: "tcpdump", group: "Network", desc: "Capture and read network packets.", native: ALL("tcpdump") },
+    { id: "netcat", name: "netcat", bin: "nc", group: "Network", desc: "Read and write raw TCP and UDP connections.",
+      native: { apt: "netcat-openbsd", dnf: "nmap-ncat", yum: "nmap-ncat", apk: "netcat-openbsd", pacman: "openbsd-netcat", zypper: "netcat-openbsd" } },
+    { id: "socat", name: "socat", bin: "socat", group: "Network", desc: "netcat with more plumbing: sockets, files, TLS.", native: ALL("socat") },
+    { id: "iperf3", name: "iperf3", bin: "iperf3", group: "Network", desc: "Measure network throughput between two hosts.",
+      native: { apt: "iperf3", dnf: "iperf3", yum: "iperf3", apk: "iperf3", pacman: "iperf3", zypper: "iperf" } },
+  ];
+  const BYID = Object.fromEntries(TOOLS.map(t => [t.id, t]));
+  // Page order of groups and of tools inside them (independent of the TOOLS order).
+  const GROUPS = [
+    ["Essentials", ["git", "python", "docker", "gh", "gitlfs"]],
+    ["Languages", ["uv", "rust", "go", "node", "bun", "deno", "java"]],
+    ["Containers", ["podman", "apptainer", "kubectl", "k9s", "helm", "kind", "dive", "kubectx"]],
+    ["Infra and cloud", ["opentofu", "terraform", "awscli", "ansible"]],
+    ["Files and text", ["fd", "bat", "eza", "delta", "dust", "duf", "sd", "tealdeer"]],
+    ["Search and data", ["ripgrep", "fzf", "jq", "yq", "gron", "jnv"]],
+    ["Data", ["sqlite3", "duckdb", "ffmpeg", "pandoc"]],
+    ["Dev workflow", ["hyperfine", "direnv", "just", "mise", "shellcheck", "precommit", "xh", "mkcert"]],
+    ["Terminal apps", ["lazygit", "lazydocker", "bottom", "glow", "harlequin", "visidata", "btop", "ncdu", "neovim", "tmux", "zellij", "yazi"]],
+    ["Shell", ["zoxide", "starship", "atuin", "clipcat", "act", "mkcd", "extract", "serve"]],
+    ["System", ["htop", "tree", "rsync", "wget", "lsof", "strace", "iotop", "sysstat", "7zip", "watch", "entr"]],
+    ["Network", ["nmap", "mtr", "traceroute", "dig", "whois", "tcpdump", "netcat", "socat", "iperf3"]],
+  ];
+
+  // How a tool gets onto this pm. `skip` wins (no install path there); `rc` tools are shell-only;
+  // `init` is extra shell wiring for a tool that is still installed by pkg or fn, so it is ignored here.
+  // Why a tool can't be installed with `pm` ("" if it can): its own `skip`, or a required tool's.
+  function skipReason(t, pm) {
+    if (t.skip && t.skip[pm]) return t.skip[pm];
+    for (const r of t.requires || []) if (skipReason(BYID[r], pm)) return `needs ${BYID[r].name}, unavailable on ${pm}`;
+    return "";
+  }
+  const skipped = (t, pm) => Boolean(skipReason(t, pm));
+  const fnFor = (t, pm) => t.fn && (t.fn[pm] || t.fn["*"]);
+
+  // How a tool gets onto this pm. Unavailable wins; `rc` tools are shell-only; a native package is
+  // preferred, and when the tool also has an upstream snippet that one is the fallback (`fb`).
+  // `init` is extra shell wiring for a tool that is still installed by pkg or fn, so it is ignored here.
+  function how(t, pm) {
+    const why = skipReason(t, pm);
+    if (why) return { type: "skip", via: "unavailable", reason: why };
+    if (t.rc) return { type: "rc", via: "shell function" };
+    const k = fnFor(t, pm);
+    // `noFallback`: pms where the upstream build can't work (glibc-only builds, or get.docker.com, on Alpine)
+    const fb = k && !(t.noFallback || []).includes(pm) ? k : null;
+    if (t.native && t.native[pm]) return { type: "pkg", via: pm, pkgs: t.native[pm], fb };
+    if (!k) throw new Error(`no install method for ${t.id} on ${pm}`);
+    return { type: "fn", via: VIA[k], snip: k };
+  }
+
+  // Selection = what the person ticked, plus anything those need. Picks that are unavailable on
+  // `pm` stay in `all` (so the combo ID is stable) but pull in nothing; `active` is what gets installed.
+  function resolve(picked, pm) {
+    const all = new Set(picked);
+    const neededBy = {};
+    picked.forEach(id => {
+      if (pm && skipped(BYID[id], pm)) return;
+      (BYID[id].requires || []).forEach(r => {
+        all.add(r); (neededBy[r] = neededBy[r] || []).push(BYID[id].name);
+      });
+    });
+    const active = new Set([...all].filter(id => !(pm && skipped(BYID[id], pm))));
+    return { all, active, neededBy };
+  }
+
+  // ---------- combo id ----------
+  // bit 0 = "wire up my shell" off; bits 1.. = TOOLS[i]. Appending tools never changes old IDs.
+  function encode(pm, picked, rcOff) {
+    let n = BigInt(rcOff ? 1 : 0);
+    TOOLS.forEach((t, i) => { if (picked.has(t.id)) n |= 1n << BigInt(i + 1); });
+    return pm + "-" + n.toString(36);
+  }
+  function decode(s) {
+    const m = /^([a-z]+)-([0-9a-z]+)$/.exec(s || "");
+    if (!m || !PM[m[1]]) return null;
+    let n = 0n;
+    for (const ch of m[2]) n = n * 36n + BigInt(parseInt(ch, 36));
+    const picked = new Set();
+    TOOLS.forEach((t, i) => { if ((n >> BigInt(i + 1)) & 1n) picked.add(t.id); });
+    return { pm: m[1], picked, rcOff: Boolean(n & 1n) };
+  }
+
+  // ---------- script generator ----------
+  function rcBlock(name, body) {
+    return [
+      `if grep -qF '# boots-on-the-ground: ${name}' "$RC"; then`,
+      `  echo "    ${name}: already in $RC"`,
+      `else`,
+      `cat >> "$RC" <<'RC_EOF'`,
+      ``,
+      `# boots-on-the-ground: ${name}`,
+      body,
+      `RC_EOF`,
+      `  echo "    ${name}: added"`,
+      `fi`,
+    ].join("\n");
+  }
+
+  function generate(pm, picked, rcOn, combo) {
+    const P = PM[pm];
+    const { all, active } = resolve(picked, pm);
+    const tools = TOOLS.filter(t => active.has(t.id));
+    const left = TOOLS.filter(t => all.has(t.id) && !active.has(t.id));
+    const pkgs = [], soft = [], pres = [], posts = [], fns = [], fbs = [], bodies = [], rcs = [];
+    let needBuild = false;
+    for (const t of tools) {
+      const h = how(t, pm);
+      if (t.build) needBuild = true;
+      if (h.type === "pkg") {
+        pkgs.push(h.pkgs);
+        if (t.pre && t.pre[pm]) pres.push(snip(t.pre[pm]));
+        if (t.post && t.post[pm]) posts.push(snip(t.post[pm]));
+        // only the first package (the one that provides the binary) is covered by the fallback;
+        // a failed secondary one (docker-cli-compose, npm) is still reported
+        if (h.fb) { fbs.push(t); soft.push(h.pkgs.split(" ")[0]); bodies.push(snip(h.fb)); }
+      } else if (h.type === "fn") {
+        fns.push(t); bodies.push(snip(h.snip));
+      } else if (h.type === "rc") {
+        rcs.push(t);
+      }
+    }
+    const L = [];
+    const names = tools.map(t => t.name.split(" ")[0]);
+    L.push("#!/usr/bin/env bash");
+    L.push("# Boots on the ground: generated install script");
+    L.push(`# generated by dev-tools-installer ${VERSION}`);
+    L.push(`# ${SITE_HERE}#${combo}`);
+    L.push(`# combo:  ${combo}`);
+    L.push(`# system: ${pm} (${P.distros}), x86_64 or aarch64`);
+    wrapList(names, 70).forEach((ln, i) => L.push((i ? "#         " : "# tools:  ") + ln));
+    if (left.length) {
+      L.push(`# left out, not available with ${pm}:`);
+      left.forEach(t => L.push(`#   ${t.name}: ${skipReason(t, pm)}`));
+    }
+    L.push("#");
+    L.push("# Read it before you run it. System packages need sudo or doas;");
+    L.push("# everything else lands under $HOME (mostly ~/.local/bin) or in /usr/local/go.");
+    L.push("set -uo pipefail", "", snip("preamble"), "");
+    if (bodies.length) L.push(snip("helpers"), "");
+
+    L.push("# ---------------------------------------------------------------- system packages");
+    L.push(`pm_refresh() { ${P.refresh}; }`);
+    L.push(`pm_try() { ${P.install}; }`);
+    L.push(snip("pm-install"));
+    L.push("", 'echo "==> system packages"');
+    L.push('pm_refresh || FAILED+=("package index refresh")');
+    L.push(`pm_install ${P.base}${needBuild ? " " + P.build : ""} || FAILED+=("base packages: \${PKG_FAILED[*]}")`);
+    if (pres.length) {
+      L.push("", "# extra package repos", ...pres, 'pm_refresh || FAILED+=("package index refresh")');
+    }
+    if (pkgs.length) {
+      L.push("");
+      if (soft.length) L.push("# packages with an upstream fallback below, used if the distro lacks them", `PKG_SOFT=" ${soft.join(" ")} "`);
+      L.push(`if ! pm_install ${pkgs.join(" ")}; then`, '  for p in "${PKG_FAILED[@]}"; do');
+      if (soft.length) L.push('    case "$PKG_SOFT" in *" $p "*) continue ;; esac');
+      L.push('    FAILED+=("$p package")', "  done", "fi");
+    }
+    if (posts.length) L.push("", ...posts);
+
+    if (bodies.length) {
+      L.push("", "# ---------------------------------------------------------------- upstream installs");
+      bodies.forEach(b => L.push(b, ""));
+      if (fbs.length) L.push(snip("fallback"), "");
+      L.push('echo', 'echo "==> upstream installs"');
+      fns.forEach(t => L.push(`step ${t.id} install_${t.id}`));
+      fbs.forEach(t => L.push(`fallback ${t.id} install_${t.id} ${t.bin}`));
+    }
+
+    // shell setup: PATH and tool hooks (`init`) follow "wire up my shell", except `initAlways`
+    // ones (nvm, SDKMAN: the tool is unusable in a new shell without them); `rc` functions always go in.
+    // `initLast` hooks go after all others: zoxide must come after anything that rewrites PROMPT_COMMAND
+    // (starship, atuin's bash-preexec, direnv, mise), or its hook check warns on every new shell.
+    const blocks = [];
+    if (rcOn) blocks.push(rcBlock("path", snip("rc-path")));
+    // `initUpstreamOnly`: the hook belongs to the upstream method (nvm, SDKMAN), not to a distro package
+    tools.filter(t => t.init && (rcOn || t.initAlways) && !(t.initUpstreamOnly && how(t, pm).type !== "fn"))
+      .sort((a, b) => (a.initLast ? 1 : 0) - (b.initLast ? 1 : 0))
+      .forEach(t => blocks.push(rcBlock(t.id, snip(t.init))));
+    rcs.forEach(t => blocks.push(rcBlock(t.id, snip(t.rc))));
+    if (blocks.length) {
+      L.push("", "# ---------------------------------------------------------------- shell setup");
+      L.push('echo', 'echo "==> shell setup"', snip("rc-head"), "", blocks.join("\n\n"));
+    }
+    if (active.has("docker")) {
+      L.push("", 'echo', 'echo "==> docker group"', snip("docker-group"));
+    }
+
+    const bins = tools.filter(t => t.bin).map(t => t.bin);
+    L.push("", "# ---------------------------------------------------------------- check");
+    L.push('echo', 'echo "==> check"');
+    if (bins.length) {
+      L.push(`for t in ${bins.join(" ")}; do`);
+      L.push(`  if have "$t"; then printf '    ok       %s\\n' "$t"; else printf '    missing  %s\\n' "$t"; FAILED+=("$t missing"); fi`);
+      L.push("done");
+    }
+    if (rcs.length) {
+      L.push(`for f in ${rcs.map(t => t.id).join(" ")}; do`);
+      L.push(`  if grep -qF "# boots-on-the-ground: $f" "$RC"; then printf '    ok       %s (in %s)\\n' "$f" "$RC"; else printf '    missing  %s\\n' "$f"; fi`);
+      L.push("done");
+    }
+    L.push("", "echo");
+    L.push('if [ "${#FAILED[@]}" -eq 0 ]; then');
+    L.push('  echo "==> done. Open a new shell to pick up PATH and rc changes."');
+    L.push("else");
+    L.push('  echo "==> finished with problems: ${FAILED[*]}" >&2');
+    L.push("  exit 1");
+    L.push("fi");
+    return L.join("\n") + "\n";
+  }
+
+  function wrapList(items, width) {
+    const lines = []; let cur = "";
+    items.forEach(it => {
+      const next = cur ? cur + ", " + it : it;
+      if (next.length > width && cur) { lines.push(cur + ","); cur = it; } else cur = next;
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function pasteWrap(pm, script) {
+    const pre = pm === "apk"
+      ? "# Alpine ships without bash, so add it first\ncommand -v bash >/dev/null 2>&1 || { if [ \"$(id -u)\" -eq 0 ]; then apk add bash; else doas apk add bash || sudo apk add bash; fi; }\n"
+      : "";
+    return pre + "cat > /tmp/boots-install.sh <<'BOOTS_EOF'\n" + script + "BOOTS_EOF\nbash /tmp/boots-install.sh\n";
+  }
+
+  // expose for testing outside the browser
+  window.__boots = { generate, encode, decode, pasteWrap, TOOLS, PM, GROUPS, VIA, VERSION, how, resolve, skipReason };
+
+  // ---------- UI ----------
+  const state = { pm: "apt", picked: new Set(), rcOn: true, mode: "paste" };
+  const $ = s => document.querySelector(s);
+  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const tick = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+
+  function renderPms() {
+    $("#pms").innerHTML = PM_SHOWN.map(p => `
+      <div class="pm"><input type="radio" name="pm" id="pm-${p}" value="${p}" ${p === state.pm ? "checked" : ""}>
+        <label for="pm-${p}"><span class="cmd">${PM[p].label ? PM[p].label.replace(/ (\(.*\))$/, " <small>$1</small>") : p}</span><span class="distros">${PM[p].distros}</span></label></div>`).join("");
+    $("#pms").querySelectorAll("input").forEach(i => i.addEventListener("change", () => { state.pm = i.value; update(); }));
+  }
+
+  // what the filter matches against, per tool
+  const HAY = Object.fromEntries(TOOLS.map(t => [t.id, [t.id, t.name, t.bin || "", t.desc, t.group].join(" ").toLowerCase()]));
+
+  function renderTools() {
+    $("#groups").innerHTML = GROUPS.map(([g, ids], gi) => `
+      <div class="group" data-group="${gi}"><h3 id="g-${gi}">${g} <span class="gcount"></span></h3><div class="tools" role="group" aria-labelledby="g-${gi}">
+      ${ids.map(id => { const t = BYID[id]; return `
+        <label class="tool" data-id="${id}">
+          <input type="checkbox" value="${id}">
+          <span class="box" style="color:var(--on-accent)">${tick}</span>
+          <span class="name">${t.name}</span>
+          <span class="via"></span>
+          <span class="desc"></span>
+        </label>`; }).join("")}
+      </div></div>`).join("");
+    $("#groups").querySelectorAll(".tool input").forEach(i => i.addEventListener("change", () => {
+      i.checked ? state.picked.add(i.value) : state.picked.delete(i.value); update();
+    }));
+  }
+
+  // Filter: every word must appear in the tool's id, name, binary, description or group.
+  function filterWords() { return $("#q").value.trim().toLowerCase().split(/\s+/).filter(Boolean); }
+  function applyFilter() {
+    const words = filterWords();
+    let shown = 0;
+    document.querySelectorAll(".group").forEach(g => {
+      let n = 0;
+      g.querySelectorAll(".tool").forEach(el => {
+        const hit = words.every(w => HAY[el.dataset.id].includes(w));
+        el.hidden = !hit; if (hit) n++;
+      });
+      g.hidden = n === 0; shown += n;
+    });
+    $("#qstatus").textContent = !words.length ? ""
+      : shown ? `${shown} of ${TOOLS.length} tools match.` : `No tools match “${$("#q").value.trim()}”.`;
+    $("#all").textContent = words.length ? "Select shown" : "Select all";
+  }
+
+  function update() {
+    const pm = state.pm;
+    const { all, active, neededBy } = resolve(state.picked, pm);
+    document.querySelectorAll(".tool").forEach(el => {
+      const id = el.dataset.id, t = BYID[id], h = how(t, pm);
+      const input = el.querySelector("input");
+      const picked = state.picked.has(id), skip = h.type === "skip";
+      const locked = !picked && all.has(id) && !skip;
+      input.checked = all.has(id);
+      // an unavailable tool can't be ticked, but a pick carried over from another pm can be unticked
+      input.disabled = locked || (skip && !picked);
+      el.classList.toggle("locked", locked);
+      el.classList.toggle("skipped", skip);
+      el.classList.toggle("picked", picked);
+      el.title = skip ? `Not available with ${pm}: ${h.reason}` : "";
+      const via = el.querySelector(".via");
+      via.textContent = h.via;
+      via.classList.toggle("native", h.type === "pkg");
+      via.title = h.type === "pkg" ? `Installed with ${pm} from your distro’s repos${h.fb ? ` (upstream ${VIA[h.fb]} if the package is unavailable)` : ""}`
+        : h.type === "rc" ? "Added to your .bashrc or .zshrc"
+        : skip ? `Not available with ${pm}` : `Fetched from upstream (${h.via})`;
+      el.querySelector(".desc").innerHTML = esc(t.desc)
+        + (locked ? ` <em>Needed by ${neededBy[id].join(" and ")}.</em>` : "")
+        + (skip ? `<span class="why">${picked ? `Left out: not available with ${pm}` : `Not available with ${pm}`} (${esc(h.reason)}).</span>` : "");
+    });
+    document.querySelectorAll(".group").forEach(g => {
+      const n = GROUPS[+g.dataset.group][1].filter(id => all.has(id)).length;
+      g.querySelector(".gcount").textContent = n ? `${n} selected` : "";
+    });
+    document.querySelectorAll("#pms input").forEach(i => { i.checked = i.value === pm; });
+    $("#rcopt").checked = state.rcOn;
+
+    const combo = encode(pm, state.picked, !state.rcOn);
+    $("#comboid").textContent = combo;
+    $("#oneliner").textContent = `curl -fsSL ${SITE_HERE}install.sh | bash -s -- ${combo}`;
+    if (location.hash.slice(1) !== combo) { try { location.replace("#" + combo); } catch (e) {} }
+
+    document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+    $("#termtitle").textContent = state.mode === "paste" ? "Terminal" : "install.sh";
+
+    const out = $("#out");
+    const left = all.size - active.size;
+    const leftNote = left ? `${left} picked tool${left > 1 ? "s are" : " is"} not available with ${pm} and left out.` : "";
+    if (!active.size) {
+      out.innerHTML = all.size
+        ? `<div class="empty"><strong>Nothing to install with ${pm}</strong>None of your picks are available here. Pick another tool or package manager.</div>`
+        : `<div class="empty"><strong>Nothing picked yet</strong>Tick a tool and your script appears here.</div>`;
+      $("#copy").disabled = true;
+      $("#hint").textContent = "";
+      $("#summary").textContent = leftNote;
+      delete out.dataset.text;
+      return;
+    }
+    $("#copy").disabled = false;
+    const script = generate(state.pm, state.picked, state.rcOn, combo);
+    const text = state.mode === "paste" ? pasteWrap(state.pm, script) : script;
+    out.innerHTML = `<pre class="code" tabindex="0" aria-label="Generated script">${highlight(text)}</pre>`;
+    out.dataset.text = text;
+    $("#hint").innerHTML = state.mode === "paste"
+      ? "Paste the whole block into a terminal. It saves the script to <code>/tmp/boots-install.sh</code> and runs it."
+      : (state.pm === "apk" ? "Save as <code>install.sh</code>, then <code>apk add bash</code> and <code>bash install.sh</code>." : "Save as <code>install.sh</code>, read it, then run <code>bash install.sh</code>.");
+
+    const counts = {};
+    TOOLS.filter(t => active.has(t.id)).forEach(t => { const h = how(t, pm); const k = h.type === "pkg" ? `from ${pm}` : h.type === "rc" ? "shell function" : "from upstream"; counts[k] = (counts[k] || 0) + 1; });
+    const parts = Object.entries(counts).map(([k, v]) => `${v} ${k === "shell function" ? (v > 1 ? "shell functions" : "shell function") : k}`);
+    $("#summary").textContent = `${active.size} tool${active.size > 1 ? "s" : ""}: ${parts.join(", ")}.${leftNote ? " " + leftNote : ""}`;
+  }
+
+  function highlight(text) {
+    return text.split("\n").map(line => {
+      const e = esc(line);
+      if (/^\s*#/.test(line)) return `<span class="c">${e}</span>`;
+      if (/^\s*echo "==&gt;/.test(e)) return `<span class="h">${e}</span>`;
+      return e;
+    }).join("\n");
+  }
+
+  async function copy() {
+    const text = $("#out").dataset.text || "";
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand("copy"); } catch (e2) {}
+      ta.remove();
+    }
+    const b = $("#copy");
+    b.textContent = ok ? "Copied" : "Select and copy";
+    setTimeout(() => { b.textContent = "Copy script"; }, 1600);
+    if (!ok) { const pre = $("#out pre"); if (pre) { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } }
+  }
+
+  function fromHash() {
+    const d = decode(location.hash.slice(1));
+    if (!d) return false;
+    state.pm = d.pm; state.picked = d.picked; state.rcOn = !d.rcOff;
+    return true;
+  }
+
+  function renderMeta() {
+    const hooks = TOOLS.filter(t => t.init && !t.initAlways).map(t => t.name);
+    $("#hooks").textContent = hooks.slice(0, -1).join(", ") + " and " + hooks[hooks.length - 1];
+    $("#ver").innerHTML = VERSION === "dev" ? "dev-tools-installer, development build"
+      : `dev-tools-installer <a href="https://github.com/Magnus167/dev-tools-installer/releases/tag/${VERSION}">${VERSION}</a>`;
+  }
+
+  renderPms();
+  renderTools();
+  renderMeta();
+  fromHash();
+  $("#rcopt").addEventListener("change", e => { state.rcOn = e.target.checked; update(); });
+  // Select all / Select shown: adds every tool available on this pm (or every one the filter shows)
+  $("#all").addEventListener("click", () => {
+    const words = filterWords();
+    TOOLS.forEach(t => { if (!skipped(t, state.pm) && words.every(w => HAY[t.id].includes(w))) state.picked.add(t.id); });
+    update();
+  });
+  $("#none").addEventListener("click", () => { state.picked = new Set(); update(); });
+  const q = $("#q");
+  q.addEventListener("input", applyFilter);
+  q.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (q.value) { q.value = ""; applyFilter(); e.preventDefault(); } else q.blur();
+  });
+  // "/" jumps to the filter unless you are typing somewhere
+  window.addEventListener("keydown", e => {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button)$/.test(a.type)))) return;
+    e.preventDefault(); q.focus(); q.select();
+  });
+  document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; update(); }));
+  $("#copy").addEventListener("click", copy);
+  window.addEventListener("hashchange", () => {
+    if (location.hash.slice(1) !== encode(state.pm, state.picked, !state.rcOn) && fromHash()) update();
+  });
+  update();
+})();
+</script>
+</body>
+</html>
+
