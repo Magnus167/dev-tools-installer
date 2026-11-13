@@ -23,19 +23,25 @@ left out of the script.
 curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- apt-1kx          # a combo ID from the page
 curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- apt git docker node   # or tool ids
 curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | sh -s -- apk git jq           # Alpine: sh, it adds bash first
-curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- --print apt-1kx  # print the script, run nothing
+curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- --print apt-1kx  # print the script, run nothing (any OS with bash)
 curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- --list apt        # tool ids, and how each installs
 ```
 
-`--no-shell` leaves PATH and tool hooks out of your rc file; `--help` has the rest. Use the versioned URL
-(`.../vX.Y.Z/install.sh`) to pin a release; the page's one-liner does. Exit status: 0 done, 1 something did
-not install, 2 bad arguments or a combo from a newer version (then nothing was changed). Under `sh` the
-installer fetches itself again from its own versioned URL and runs under bash (`BOOTS_INSTALL_URL`
-overrides that URL, for mirrors and tests).
+Run it as your normal user, not with `sudo`: it calls sudo (or doas) itself for system packages, and under
+sudo it stops (exit 2), because the user-level tools and shell setup would land in root's home
+(`... | sudo env BOOTS_ALLOW_ROOT=1 bash -s -- ...` if that is really what you want; plain root, as in a
+container, is fine). `--no-shell` leaves PATH and tool hooks out of your rc file; `--help` has the rest. Use
+the versioned URL (`.../vX.Y.Z/install.sh`) to pin a release; the page's one-liner does. Exit status: 0 done,
+1 something did not install, 2 bad arguments or a combo from a newer version (then nothing was changed).
+A combo whose digits spell a tool id (`apt-jq`) is taken for a typo of `apt jq` and refused; the page writes
+such combos with a 0 after the dash (`apt-0jq`, same value). Under `sh` the installer fetches itself again
+from its own versioned URL and runs under bash (`BOOTS_INSTALL_URL` overrides that URL for mirrors and
+tests; https only, or http://localhost).
 
 For AI assistants and scripts, each version also serves [`llms.txt`](https://magnus167.github.io/dev-tools-installer/llms.txt)
 (how to answer with a combo link or tool ids) and [`tools.json`](https://magnus167.github.io/dev-tools-installer/tools.json)
-(every tool, and how it installs with each package manager).
+(every tool, and how it installs with each package manager, including the upstream fallback behind a distro
+package).
 
 ## Tools
 
@@ -90,10 +96,13 @@ gh workflow run release.yml -f version=vX.Y.Z
 gh run watch
 ```
 
-Before tagging, the workflow builds the installer and runs `tests/parity.mjs` (it runs install.sh only with
-`--print`/`--list`/`--help`). It then creates the release, builds `install.sh`, `tools.json`, `llms.txt` and
-`SHA256SUMS` from the new tag, attaches them to the release, and deploys GitHub Pages. (A release created in
-the GitHub UI deploys Pages but gets no attached files.)
+The workflow first builds everything with the version tagged locally at the commit (the same
+`scripts/build-site.sh` run Pages does), checks `SHA256SUMS`, and runs `tests/parity.mjs` on the stamped page
+against its own `install.sh` (install.sh runs only with `--print`/`--list`/`--help`). Then it creates a draft
+release with generated notes, attaches `install.sh`, `tools.json`, `llms.txt` and `SHA256SUMS`, publishes it
+(which creates the tag), and deploys GitHub Pages. If a run fails after the draft exists, run it again for the
+same version: it reuses the draft. (A release created in the GitHub UI deploys Pages but gets no attached
+files.)
 
 Every release stays online at its own path, `https://magnus167.github.io/dev-tools-installer/vX.Y.Z/`, and
 the site root (and `/latest/`) serves the newest one. `scripts/build-site.sh` builds that tree from the git
@@ -127,8 +136,9 @@ install runs inside throwaway Docker containers. See [`tests/README.md`](tests/R
 ```sh
 node tests/gen.mjs index.html apt all             # print a script
 node tests/gen.mjs index.html --combos            # combo IDs + encode/decode round-trip
-node tests/parity.mjs index.html                  # install.sh --print == the page's script, for ~1400 selections
-tests/lint.sh index.html                          # bash -n on every script, shellcheck (in Docker), incl. install.sh
+node tests/parity.mjs index.html                  # install.sh --print == the page's script (about 1,300 selections)
+tests/lint.sh index.html                          # page scripts parse, bash -n + shellcheck (Docker) incl. install.sh
+tests/page-check.sh index.html                    # the page in headless Chromium (Docker): no errors, links, warnings
 tests/installer-e2e.sh index.html                 # curl | bash and | sh installs + error paths, in containers
 node scripts/build-installer.mjs index.html out/  # write install.sh, tools.json, llms.txt (as "dev")
 tests/matrix.sh index.html --ids all --jobs 4 --timeout 60   # install everything in 11 distro containers

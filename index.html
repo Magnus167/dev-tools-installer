@@ -379,6 +379,8 @@ pre.code .h { color: var(--con-hi); }
   </header>
   <noscript><div class="infobar"><p><b>JavaScript is off,</b> so this page can’t build a script here. You can still use the installer from a terminal: see <a href="#agents">For AI assistants and scripts</a> below, or read <a href="llms.txt">llms.txt</a> and <a href="tools.json">tools.json</a>.</p></div></noscript>
 
+  <div class="infobar" id="newer" role="alert" hidden><p></p></div>
+
   <main class="wbody">
     <div class="pane">
       <div class="pane-in">
@@ -436,7 +438,7 @@ pre.code .h { color: var(--con-hi); }
         <h2 id="h-script">Install command and script</h2>
         <div class="cmds">
           <div class="cmd primary">
-            <p class="cl" id="l-cmd"><b>Install command</b><small>Run it on the new box. It downloads this version’s installer and installs your picks.</small></p>
+            <p class="cl" id="l-cmd"><b>Install command</b><small>Run it on the new box as your normal user, not with sudo: it asks for sudo itself when it needs to. It downloads this version’s installer and installs your picks.</small></p>
             <div class="cr">
               <code id="oneliner" class="none">Tick at least one tool to get a command.</code>
               <button class="btn go" type="button" data-copy="cmd" data-select="#oneliner" aria-describedby="l-cmd" disabled>Copy command</button>
@@ -450,7 +452,7 @@ pre.code .h { color: var(--con-hi); }
             </div>
           </div>
           <div class="cmd">
-            <p class="cl" id="l-print"><b>View the script first</b><small>Prints the exact script it would run, and runs nothing.</small></p>
+            <p class="cl" id="l-print"><b>View the script first</b><small id="printnote">Prints the exact script it would run, and runs nothing.</small></p>
             <div class="cr">
               <code id="printcmd" class="none">Tick at least one tool to get a command.</code>
               <button class="btn" type="button" data-copy="print" data-select="#printcmd" aria-label="Copy the view-first command" disabled>Copy</button>
@@ -491,12 +493,13 @@ pre.code .h { color: var(--con-hi); }
         <h3>From a link to a command</h3>
         <p>A link to this page ends in a combo ID after the <code>#</code>: the package manager, a dash, and the picked tools as a base-36 bitmask (tools.json documents the bits). Pass the combo ID to install.sh from the same version directory. For example, the link <code><span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>#apt-2gosa7pa2h6</code> (git, docker and node on Debian or Ubuntu) is the same as:</p>
         <pre>curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- apt-2gosa7pa2h6</pre>
+        <p>If the part after the dash is exactly a tool id (say <code>apt-jq</code>), install.sh takes it for a typo of <code>apt jq</code> and stops; write a 0 after the dash (<code>apt-0jq</code>), which is the same combo.</p>
         <h3>Examples</h3>
         <pre><span class="c"># print the script for a combo ID and run nothing</span>
 curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- --print apt-2gosa7pa2h6
 <span class="c"># install by package manager and tool ids; add --no-shell to leave .bashrc and .zshrc alone</span>
 curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- apt git docker node
-<span class="c"># Alpine has no bash until the installer adds it, so pipe to sh</span>
+<span class="c"># Alpine has no bash until the installer adds it, so pipe to sh (--print needs bash: use any machine with bash, or open the page link)</span>
 curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | sh -s -- apk git jq
 <span class="c"># list tool ids and how one package manager installs each</span>
 curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- --list apt
@@ -504,7 +507,7 @@ curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__
 curl -fsSL -O <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh -O <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS</pre>
         <h3>Read before you run</h3>
-        <p>The script installs system packages with sudo (or doas) and puts upstream tools under your home directory, mostly in ~/.local/bin; Go goes to /usr/local/go. Before running it for someone, show them the script (<code>--print</code>, or this page with their link) and say what it will install. Versioned URLs (…/vX.Y.Z/) are built from that release’s git tag, so a pinned link keeps giving the same script.</p>
+        <p>Don’t put sudo in front of the command: run it as the normal user (<code>… | bash -s -- …</code>, not <code>… | sudo bash</code>). The script installs system packages with sudo (or doas) itself and puts upstream tools under your home directory, mostly in ~/.local/bin; Go goes to /usr/local/go. Under sudo it stops with exit status 2 unless <code>BOOTS_ALLOW_ROOT=1</code> is set. Before running it for someone, show them the script (<code>--print</code>, or this page with their link) and say what it will install. Versioned URLs (…/vX.Y.Z/) are built from that release’s git tag, so a pinned link keeps giving the same script.</p>
       </section>
     </div>
   </main>
@@ -530,6 +533,13 @@ sha256sum --check --ignore-missing SHA256SUMS</pre>
 <!-- ===================== bash snippets (raw text, no escaping) ===================== -->
 
 <script type="text/plain" data-snip="preamble">
+# Run as your normal user: under sudo, ~/.local/bin and the shell setup would land in root's home.
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-${DOAS_USER:-}}" ] && [ "${SUDO_USER:-${DOAS_USER:-}}" != root ] \
+  && [ "${BOOTS_ALLOW_ROOT:-}" != 1 ]; then
+  echo "run this as your normal user, not with sudo: it calls sudo itself when it needs to." >&2
+  echo "(under sudo it would install into root's home; set BOOTS_ALLOW_ROOT=1 to do that anyway)" >&2
+  exit 2
+fi
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 mkdir -p "$BIN_DIR"
 export PATH="$BIN_DIR:$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
@@ -1912,7 +1922,15 @@ fi
     for (const ch of m[2]) n = n * 36n + BigInt(parseInt(ch, 36));
     const picked = new Set();
     TOOLS.forEach((t, i) => { if ((n >> BigInt(i + 1)) & 1n) picked.add(t.id); });
-    return { pm: m[1], picked, rcOff: Boolean(n & 1n) };
+    // `newer`: bits beyond this version's tools, i.e. the ID was made by a later version
+    return { pm: m[1], picked, rcOff: Boolean(n & 1n), newer: n >> BigInt(TOOLS.length + 1) > 0n };
+  }
+  // A combo whose digits spell a tool id or name (apt-jq) reads like a typo of "apt jq", so install.sh
+  // refuses it; a leading zero keeps the value and gets past that check (apt-0jq).
+  const TOOL_WORDS = new Set(TOOLS.flatMap(t => [t.id, t.name.toLowerCase()]));
+  function safeCombo(combo) {
+    const k = combo.indexOf("-");
+    return TOOL_WORDS.has(combo.slice(k + 1)) ? combo.slice(0, k + 1) + "0" + combo.slice(k + 1) : combo;
   }
 
   // ---------- script generator ----------
@@ -2063,7 +2081,7 @@ fi
 
   // expose for testing outside the browser, and for scripts/build-installer.mjs, which evaluates the
   // page only up to this line and builds install.sh, tools.json and llms.txt from it
-  window.__boots = { generate, encode, decode, pasteWrap, TOOLS, PM, PM_ORDER, PM_SHOWN, GROUPS, VIA, SNIP, VERSION, COMMIT, COMMIT_SHORT, SITE, SITE_HERE, REPO, how, resolve, skipReason };
+  window.__boots = { generate, encode, decode, safeCombo, pasteWrap, TOOLS, PM, PM_ORDER, PM_SHOWN, GROUPS, VIA, SNIP, VERSION, COMMIT, COMMIT_SHORT, SITE, SITE_HERE, REPO, how, resolve, skipReason };
 
   // ---------- UI ----------
   const state = { pm: "apt", picked: new Set(), rcOn: true, mode: "paste" };
@@ -2234,14 +2252,15 @@ fi
   function clearFilter() { $("#q").value = ""; applyFilter(); }
 
   // The one-liners. They fetch install.sh from this page's own version directory; Alpine pipes to sh,
-  // because install.sh adds bash there before running itself again.
+  // because install.sh adds bash there before running itself again. --print installs nothing, so it
+  // never adds bash: it always pipes to bash (on Alpine: run it elsewhere, or read the script here).
   function commands(pm, combo) {
-    const base = `curl -fsSL ${SITE_HERE}install.sh | ${pm === "apk" ? "sh" : "bash"} -s --`;
+    const curl = `curl -fsSL ${SITE_HERE}install.sh |`, sh = pm === "apk" ? "sh" : "bash", c = safeCombo(combo);
     const ids = TOOLS.filter(t => state.picked.has(t.id)).map(t => t.id);
     return {
-      cmd: `${base} ${combo}`,
-      readable: `${base} ${pm} ${ids.join(" ")}${state.rcOn ? "" : " --no-shell"}`,
-      print: `${base} --print ${combo}`,
+      cmd: `${curl} ${sh} -s -- ${c}`,
+      readable: `${curl} ${sh} -s -- ${pm} ${ids.join(" ")}${state.rcOn ? "" : " --no-shell"}`,
+      print: `${curl} bash -s -- --print ${c}`,
     };
   }
 
@@ -2302,6 +2321,8 @@ fi
     const ready = active.size > 0;
     const c = ready ? commands(pm, combo) : {};
     setCode("#oneliner", c.cmd); setCode("#readable", c.readable); setCode("#printcmd", c.print);
+    $("#printnote").innerHTML = "Prints the exact script it would run, and runs nothing."
+      + (pm === "apk" ? ` Alpine has no bash yet, so run it on any machine with bash, or open <a href="${esc(SITE_HERE + "#" + combo)}">this page link</a> to read the script here.` : "");
     $("#pcmd").textContent = c.cmd || "Tick a tool to get your command.";
     $("#pcmd").classList.toggle("none", !ready);
     $$("[data-copy]").forEach(b => { b.disabled = !ready; });
@@ -2366,9 +2387,16 @@ fi
   }
 
   function fromHash() {
-    const d = decode(location.hash.slice(1));
+    const h = location.hash.slice(1), d = decode(h);
     if (!d) return false;
     state.pm = d.pm; state.picked = d.picked; state.rcOn = !d.rcOff;
+    // a link from a later version: its extra picks can't be shown here, so say so and point to the latest
+    const bar = $("#newer");
+    bar.hidden = !d.newer;
+    if (d.newer) {
+      bar.querySelector("p").innerHTML = `<b>This link was made by a newer version of this page.</b> Some of its picks are not in ${VERSION === "dev" ? "this build" : esc(VERSION)}, so they are not shown here. `
+        + `Open <a href="${esc(SITE + "#" + h)}">${esc(SITE)}</a> (latest) to see them all.`;
+    }
     return true;
   }
 

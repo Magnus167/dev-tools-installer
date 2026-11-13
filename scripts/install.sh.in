@@ -15,6 +15,17 @@ boots_usage() {
 BOOTS_HELP
 }
 
+# Under sudo (or doas) the tools and shell setup would go to root's home: stop, unless asked not to.
+boots_root_guard() {
+  boots_by="${SUDO_USER:-${DOAS_USER:-}}"
+  if [ "$(id -u)" -eq 0 ] && [ -n "$boots_by" ] && [ "$boots_by" != root ] && [ "${BOOTS_ALLOW_ROOT:-}" != 1 ]; then
+    echo "install.sh: run this as your normal user, not with sudo: it calls sudo itself when it needs to." >&2
+    echo "install.sh: (under sudo it would install into root's home; nothing was changed. To do that anyway:" >&2
+    echo "install.sh:  ... | sudo env BOOTS_ALLOW_ROOT=1 bash -s -- ...)" >&2
+    exit 2
+  fi
+}
+
 if [ -z "${BASH_VERSION:-}" ]; then
   boots_file=""
   if [ -f "$0" ] && grep -q '^# boots-installer: ' "$0" 2>/dev/null; then boots_file=$0
@@ -22,19 +33,28 @@ if [ -z "${BASH_VERSION:-}" ]; then
   # cleanly instead of failing on a closed pipe; the bash part is fetched again below
   elif [ ! -t 0 ]; then cat >/dev/null 2>&1
   fi
+  boots_mode=run; boots_sel=""
   for boots_a in "$@"; do
-    case $boots_a in -h|--help) boots_usage; exit 0 ;; esac
+    case $boots_a in
+      -h|--help) boots_usage; exit 0 ;;
+      --print|--list) boots_mode=$boots_a ;;
+      -*) ;;
+      *) boots_sel="$boots_sel $boots_a" ;;
+    esac
   done
+  boots_sel=${boots_sel# }
   if [ "$#" -eq 0 ]; then boots_usage >&2; exit 2; fi
+  if [ "$boots_mode" = run ]; then boots_root_guard; fi
   if ! command -v bash >/dev/null 2>&1; then
-    for boots_a in "$@"; do
-      case $boots_a in
-        --print|--list)
-          echo "install.sh: $boots_a needs bash, which is not installed here; nothing was changed." >&2
-          echo "install.sh: install bash first, or open @SITE_HERE@ to see the script in the page." >&2
-          exit 1 ;;
+    if [ "$boots_mode" != run ]; then
+      echo "install.sh: $boots_mode needs bash, which is not installed here; nothing was changed." >&2
+      case $boots_mode:$boots_sel in
+        --print:*-*) echo "install.sh: read the script in the page instead: @SITE_HERE@#${boots_sel%% *}" >&2 ;;
+        --print:?*) echo "install.sh: read the script in the page instead: @SITE_HERE@ (pick ${boots_sel%% *} and: ${boots_sel#* })" >&2 ;;
       esac
-    done
+      echo "install.sh: or run it on any machine with bash: curl -fsSL @SELF_URL@ | bash -s -- $*" >&2
+      exit 1
+    fi
     if command -v apk >/dev/null 2>&1; then
       echo "==> installing bash, which this installer needs"
       if [ "$(id -u)" -eq 0 ]; then apk add bash
@@ -49,8 +69,18 @@ if [ -z "${BASH_VERSION:-}" ]; then
   fi
   # run from a file (sh install.sh ...): hand the same file to bash
   if [ -n "$boots_file" ]; then exec bash "$boots_file" "$@"; fi
-  # piped (curl ... | sh -s -- ...): fetch this same version again and run it under bash
-  boots_url="${BOOTS_INSTALL_URL:-@SELF_URL@}"
+  # piped (curl ... | sh -s -- ...): fetch this same version again and run it under bash.
+  # BOOTS_INSTALL_URL may point elsewhere, but only over https (or http on this machine, for tests).
+  boots_url="@SELF_URL@"
+  case ${BOOTS_INSTALL_URL:-} in
+    '') ;;
+    *@*|*[[:space:]]*) boots_urlok=no ;;
+    https://*|http://localhost/*|http://localhost:*|http://127.0.0.1/*|http://127.0.0.1:*) boots_url=$BOOTS_INSTALL_URL ;;
+    *) boots_urlok=no ;;
+  esac
+  if [ "${boots_urlok:-}" = no ]; then
+    echo "install.sh: ignoring BOOTS_INSTALL_URL=$BOOTS_INSTALL_URL (only https://, or http://localhost for tests); using $boots_url" >&2
+  fi
   boots_tmp="$(mktemp "${TMPDIR:-/tmp}/boots-installer.XXXXXX")" || exit 1
   if command -v curl >/dev/null 2>&1; then curl -fsSL "$boots_url" -o "$boots_tmp"
   elif command -v wget >/dev/null 2>&1; then wget -qO "$boots_tmp" "$boots_url"
@@ -79,6 +109,16 @@ LIMB_MASK=16777215
 boots_die() { echo "install.sh: $*" >&2; exit 2; }
 
 is_pm() { local p; for p in "${PM_IDS[@]}"; do [ "$p" = "$1" ] && return 0; done; return 1; }
+
+tool_word() { # tool_word <word>: is it a tool id or (lowercase) name?
+  local w
+  for w in "${T_WORDS[@]}"; do [ "$w" = "$1" ] && return 0; done
+  return 1
+}
+
+safe_combo() { # safe_combo <combo>: as safeCombo() in the page: a 0 after the dash if the digits spell a tool
+  if tool_word "${1#*-}"; then REPLY="${1%%-*}-0${1#*-}"; else REPLY=$1; fi
+}
 
 tool_index() { # tool_index <id>: its index in TOOLS, in REPLY
   local i
@@ -375,6 +415,10 @@ boots_main() {
   case $a in
     *-*) # a combo ID: <pm>-<base 36 bitmask>
       pm=${a%%-*}; digits=${a#*-}
+      if is_pm "$pm" && tool_word "$digits"; then
+        echo "install.sh: '$a' is not a combo ID; did you mean: ... | bash -s -- $pm $digits" >&2
+        boots_die "(a combo ID from a page link that happens to spell a tool id is written $pm-0$digits)"
+      fi
       is_pm "$pm" || boots_die "'$a' is not a combo ID: '$pm' is not a package manager (one of: ${PM_LIST[*]})"
       case $digits in ''|*[!0-9a-z]*) boots_die "'$a' is not a combo ID (expected $pm- and then digits and lowercase letters)" ;; esac
       (( ${#digits} <= 64 )) || boots_die "'$a' is too long to be a combo ID"
@@ -424,6 +468,7 @@ boots_main() {
   if [ "$mode" = print ]; then printf '%s' "$REPLY"; return 0; fi
 
   # ---- install: check the system, save the script, run it
+  boots_root_guard
   a=$pm; [ "$pm" = apt ] && a=apt-get
   if ! command -v "$a" >/dev/null 2>&1; then
     boots_die "$combo is for $pm ($P_DISTROS), but there is no $a here; nothing was changed (see --help for package managers)"
@@ -436,7 +481,8 @@ boots_main() {
     [ -n "${ACT[i]}" ] || echo "    left out, not available with $pm: ${T_NAME[i]} (${H_WHY[i]})"
   done
   echo "==> running the generated script, saved as $f"
-  echo "    (to read it without running anything: ... | bash -s -- --print $combo)"
+  safe_combo "$combo"
+  echo "    (to read it without running anything: ... | bash -s -- --print $REPLY)"
   echo
   if { : </dev/tty; } 2>/dev/null; then bash "$f" </dev/tty; else bash "$f" </dev/null; fi
 }

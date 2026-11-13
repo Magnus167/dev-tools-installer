@@ -14,8 +14,31 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------- load the page
+// checkPage <html text>: every inline script must parse (classic scripts as JavaScript, JSON-LD as JSON).
+// The loader below runs only part of the app script, so this is what catches an error further down,
+// such as a duplicate const in the UI code. Returns the number of scripts checked; throws on an error.
+export function checkPage(html, name = "page") {
+  const re = /<script([^>]*)>([\s\S]*?)<\/script>/g;
+  let m, n = 0;
+  while ((m = re.exec(html))) {
+    const attrs = m[1], type = (/\btype="([^"]*)"/.exec(attrs) || [])[1] || "";
+    if (/\bsrc=/.test(attrs) || /data-snip=/.test(attrs) || type === "text/plain") continue;
+    const line = html.slice(0, m.index).split("\n").length;
+    try {
+      if (/json/.test(type)) JSON.parse(m[2]);
+      else if (!type || /^(text|application)\/(java|ecma)script$/.test(type)) new vm.Script(m[2], { filename: `${name}:<script> at line ${line}` });
+      else continue;
+    } catch (e) {
+      throw new Error(`${name}: the <script> at line ${line} does not parse: ${e.message}`);
+    }
+    n++;
+  }
+  return n;
+}
+
 export function loadPage(htmlPath) {
   const html = fs.readFileSync(htmlPath, "utf8");
+  checkPage(html, htmlPath);
   const snips = [];
   const re = /<script([^>]*)>([\s\S]*?)<\/script>/g;
   let m, app = null;
@@ -111,7 +134,9 @@ export function buildInstaller(htmlPath) {
   D.push(bashArray("T_INITUP", TOOLS.map(t => (t.initUpstreamOnly ? "1" : ""))));
   D.push(bashArray("T_INITLAST", TOOLS.map(t => (t.initLast ? "1" : ""))));
   D.push(bashArray("T_RC", TOOLS.map(t => t.rc || ""), "shell function snippet, for shell-only tools"));
-  D.push(`T_DOCKER=${"docker" in idx ? idx.docker : "''"}`, "");
+  D.push(`T_DOCKER=${"docker" in idx ? idx.docker : "''"}`);
+  D.push(bashArray("T_WORDS", [...new Set(TOOLS.flatMap(t => [t.id, t.name.toLowerCase()]))].filter(w => /^[0-9a-z]+$/.test(w)),
+    "tool ids and names that a combo's digits could spell (see safeCombo() in the page)"), "");
   D.push("# page order of groups, with the tool indices in each");
   D.push(bashArray("G_NAME", GROUPS.map(g => g[0])));
   D.push(bashArray("G_TOOLS", GROUPS.map(g => g[1].map(id => { if (!(id in idx)) fail(`GROUPS has unknown ${id}`); return idx[id]; }).join(" "))), "");
@@ -176,13 +201,15 @@ export function buildInstaller(htmlPath) {
     `  curl -fsSL ${selfUrl} | sh -s -- apk git jq`,
     ``,
     `It builds the same script the page shows for that selection, saves it to a temp file and runs it.`,
-    `Read it first (--print). System packages need root, sudo or doas; everything else goes under $HOME`,
-    `(mostly ~/.local/bin), Go in /usr/local/go. Re-running is safe: installed tools are skipped.`,
+    `Read it first (--print). Run it as your normal user, not with sudo: it calls sudo (or doas) itself`,
+    `for system packages, and under sudo it stops unless BOOTS_ALLOW_ROOT=1. Everything else goes under`,
+    `$HOME (mostly ~/.local/bin), Go in /usr/local/go. Re-running is safe: installed tools are skipped.`,
+    `A combo whose digits spell a tool id (apt-jq) is taken for a typo of "apt jq"; write apt-0jq.`,
     ``,
     `Exit status: 0 done; 1 something did not install (the script's summary says what);`,
     `2 bad arguments, or a combo made by a newer version (nothing was changed).`,
-    `BOOTS_INSTALL_URL overrides where "| sh" fetches this installer again under bash`,
-    `(default ${selfUrl}).`,
+    `BOOTS_INSTALL_URL overrides where "| sh" fetches this installer again under bash (https:// only,`,
+    `or http://localhost for tests; default ${selfUrl}).`,
   ].join("\n");
   if (/^BOOTS_HELP$/m.test(help)) fail("help text contains the here-doc delimiter");
 
@@ -208,7 +235,13 @@ export function buildInstaller(htmlPath) {
       requires: t.requires || [],
       pm: Object.fromEntries(PM_SHOWN.map(p => {
         const h = jsonPm[p][i], e = { method: method[h.type], via: h.via };
-        if (h.type === "pkg") e.packages = h.pkgs.split(" ");
+        if (h.type === "pkg") {
+          e.packages = h.pkgs.split(" ");
+          // the upstream install used when the distro lacks the package; null when the tool has an
+          // upstream install that can't work with this pm (its noFallback, e.g. glibc-only builds on Alpine)
+          if (h.fb) e.fallback = { via: VIA[h.fb], method: "upstream" };
+          else if (t.fn && (t.fn[p] || t.fn["*"])) e.fallback = null;
+        }
         if (h.type === "skip") e.reason = h.reason;
         return [p, e];
       })),
@@ -230,7 +263,7 @@ export function buildInstaller(htmlPath) {
     ``,
     `- [Page](${SITE_HERE}): pick a package manager and tools; the script appears below. \`${SITE_HERE}#<combo>\` preselects a combo.`,
     `- [install.sh](${selfUrl}): the curl installer (usage below, or \`--help\`).`,
-    `- [tools.json](${SITE_HERE}tools.json): every tool id, its name, group, and how it installs with each package manager (method pkg, upstream, shell or unavailable, with the reason); package managers; the combo format.`,
+    `- [tools.json](${SITE_HERE}tools.json): every tool id, its name, group, and how it installs with each package manager (\`tools[].pm.<pm>\`: method pkg, upstream, shell or unavailable with a reason; for pkg, \`fallback\` is the upstream install used when the distro lacks the package, and null when that upstream build can't work there, e.g. glibc-only builds on Alpine); package managers; the combo format.`,
     `- [SHA256SUMS](${SITE_HERE}SHA256SUMS): sha256 of index.html, install.sh, tools.json and llms.txt in this directory.`,
     `- [Source](${REPO}) and [release ${VERSION}](${rel}).`,
     ``,
@@ -241,10 +274,13 @@ export function buildInstaller(htmlPath) {
     `    ${SITE_HERE}#${exCombo}`,
     `    curl -fsSL ${selfUrl} | bash -s -- ${exCombo}`,
     ``,
-    `For apk (Alpine has no bash), pipe into sh instead: \`curl -fsSL ${selfUrl} | sh -s -- <combo>\`; it installs bash first.`,
+    `For apk (Alpine has no bash), pipe into sh instead: \`curl -fsSL ${selfUrl} | sh -s -- <combo>\`; it installs bash first. \`--print\` installs nothing, so it needs bash: run it on any machine with bash, or open the page link to read the script.`,
+    ``,
+    `If the part after the dash is exactly a tool id (say \`apt-jq\`), install.sh takes it for a typo of \`apt jq\` and stops; write a 0 after the dash (\`apt-0jq\`), which is the same combo.`,
     ``,
     `## How to answer`,
     ``,
+    `- Don't put sudo in the command: \`curl ... | bash -s -- ...\`, run as the normal user. The script calls sudo (or doas) itself for system packages; under sudo it stops with exit 2 unless BOOTS_ALLOW_ROOT=1 is set (only when installing into root's home is really wanted).`,
     `- Given a link with \`#<combo>\`: give the curl command above with that combo, and offer to show the script first with \`--print\`: \`curl -fsSL ${selfUrl} | bash -s -- --print <combo>\`.`,
     `- Given a request in words, such as "docker and node on Ubuntu": map the distro to a package manager (${PM_SHOWN.map(p => `${p}: ${PM[p].distros}`).join("; ")}), take the tool ids from the list below or tools.json, and give \`curl -fsSL ${selfUrl} | bash -s -- apt docker node\` (the same selection as the combo ${exDocker}). Add \`--no-shell\` to keep PATH and tool hooks out of ~/.bashrc or ~/.zshrc.`,
     `- To check that a tool is available with a package manager, use tools.json (\`tools[].pm.<pm>.method\`, "unavailable" comes with a reason) or \`... | bash -s -- --list <pm>\`. Unavailable picks are left out of the script; ids are case-sensitive and an unknown id stops with close matches.`,
@@ -267,7 +303,7 @@ export function buildInstaller(htmlPath) {
     ``,
     `## Safety`,
     ``,
-    `- Suggest reading the script before running it (\`--print\`, or the page). It needs root, sudo or doas for system packages and may prompt for a password.`,
+    `- Suggest reading the script before running it (\`--print\`, or the page). Run it as the normal user, never with sudo in front: it calls sudo or doas itself for system packages (and may prompt for a password), and refuses to run under sudo unless BOOTS_ALLOW_ROOT=1.`,
     `- Upstream installs fetch release binaries from GitHub or the vendor and some vendor install scripts (get.docker.com, rustup, uv, nvm, SDKMAN); \`--list <pm>\` shows which tool comes from where.`,
     `- It may append PATH, tool hooks and shell functions to ~/.bashrc or ~/.zshrc (each block once, marked "# boots-on-the-ground: <name>"), and adds the user to the docker group when docker is picked.`,
     `- Re-running is safe: tools already on PATH are skipped.`,

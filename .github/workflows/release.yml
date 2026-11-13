@@ -1,5 +1,7 @@
 name: Release
 
+# Build and verify first, then a draft release with the files attached, then publish (which creates the
+# tag), then deploy Pages. Re-running for a version whose draft is still there reuses that draft.
 on:
   workflow_dispatch:
     inputs:
@@ -30,45 +32,54 @@ jobs:
             echo "::error::version must match vX.Y.Z (got '$VERSION')"
             exit 1
           fi
-      - name: Ensure release does not exist
+      - name: Check for an existing release or tag
         run: |
-          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::release $VERSION already exists"
-            exit 1
-          fi
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
-            echo "::error::tag $VERSION already exists"
-            exit 1
-          fi
+          # drafts are only listed, not looked up by tag
+          draft="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+            --jq ".[] | select(.tag_name == \"$VERSION\") | .draft")"
+          tag=no
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then tag=yes; fi
+          case "$draft:$tag" in
+            :no)     echo "DRAFT=" >> "$GITHUB_ENV" ;;
+            true:no) echo "reusing the draft release $VERSION"; echo "DRAFT=yes" >> "$GITHUB_ENV" ;;
+            *)       echo "::error::$VERSION is already released or tagged (draft: '${draft:-none}', tag: $tag)"; exit 1 ;;
+          esac
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-      # Before anything is tagged: the installer must build, and its --print output must match the
-      # page's script byte for byte (runs install.sh with --print/--list/--help only; installs nothing).
-      - name: Check the installer builds and matches the page
+      # The same build pages.yml runs, from a local tag at this commit: the stamped page and its files.
+      - name: Build the site, with the version tagged at this commit (local tag only)
         run: |
-          node scripts/build-installer.mjs index.html "$RUNNER_TEMP/preflight"
-          node tests/parity.mjs index.html
-      - name: Create release
-        run: |
-          gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --generate-notes --title "$VERSION"
-      # Built from the tag the release just created, the same way pages.yml builds the site, so the
-      # attached files are byte-identical to the ones served at <site>/vX.Y.Z/.
-      - name: Build install.sh, tools.json, llms.txt, SHA256SUMS from the tag
-        run: |
-          git fetch --force origin "refs/tags/$VERSION:refs/tags/$VERSION"
-          test "$(git rev-parse "$VERSION^{commit}")" = "$GITHUB_SHA"
+          git tag "$VERSION" "$GITHUB_SHA"
           bash scripts/build-site.sh "$RUNNER_TEMP/site"
-          cd "$RUNNER_TEMP/site/$VERSION"
-          sha256sum -c SHA256SUMS
-          grep -q "^BOOTS_VERSION=$VERSION\$" install.sh
-      - name: Attach them to the release
+      # Runs install.sh only with --print/--list/--help; installs nothing.
+      - name: Verify checksums, and install.sh against the stamped page
         run: |
           d="$RUNNER_TEMP/site/$VERSION"
-          gh release upload "$VERSION" --repo "$GITHUB_REPOSITORY" \
+          (cd "$d" && sha256sum -c SHA256SUMS)
+          grep -q "^BOOTS_VERSION=$VERSION\$" "$d/install.sh"
+          grep -q "APP_COMMIT = \"$GITHUB_SHA\"" "$d/index.html"
+          node tests/parity.mjs "$d/index.html" --installer "$d"
+      - name: Create the draft release
+        if: env.DRAFT != 'yes'
+        run: |
+          gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" --draft \
+            --target "$GITHUB_SHA" --generate-notes --title "$VERSION"
+      - name: Attach the files
+        run: |
+          d="$RUNNER_TEMP/site/$VERSION"
+          gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
+          gh release upload "$VERSION" --repo "$GITHUB_REPOSITORY" --clobber \
             "$d/install.sh" "$d/tools.json" "$d/llms.txt" "$d/SHA256SUMS"
+      - name: Publish (creates the tag)
+        run: |
+          gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$VERSION" --jq .sha)"
+          if [ "$sha" != "$GITHUB_SHA" ]; then
+            echo "::error::tag $VERSION points at $sha, expected $GITHUB_SHA"
+            exit 1
+          fi
 
   pages:
     needs: release

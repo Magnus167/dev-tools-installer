@@ -9,6 +9,8 @@ SEV="${SC_SEVERITY:-warning}"
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/lint.XXXXXX")"
 fail=0; nsyn=0; badsyn=0
 
+# the whole page: every inline script must parse (the generator tests run only part of the app script)
+node "$HERE/gen.mjs" "$HTML" --check-page || { echo "PAGE: a script on the page does not parse"; fail=1; }
 node "$HERE/gen.mjs" "$HTML" --dump "$OUT" || { echo "GENERATE: errors above"; fail=1; }
 
 for f in "$OUT"/*/*.sh; do

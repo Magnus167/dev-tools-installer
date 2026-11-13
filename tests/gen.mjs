@@ -4,12 +4,14 @@
 //        gen.mjs <html> --list
 //        gen.mjs <html> --combos [--base N]
 //        gen.mjs <html> --dump <dir>      (lint helper: writes <dir>/<pm>/{all,all-norc,<id>}.sh)
+//        gen.mjs <html> --check-page      (every inline script on the page parses)
 import fs from "node:fs";
 import path from "node:path";
-import { loadPage } from "../scripts/build-installer.mjs";
+import { loadPage, checkPage } from "../scripts/build-installer.mjs";
 
-// The page is evaluated by scripts/build-installer.mjs's loader: the app script up to the
-// `window.__boots = {...}` line (data and generator), without the UI code after it.
+// The page is evaluated by scripts/build-installer.mjs's loader: it first checks that every inline
+// script on the page parses (checkPage), then runs the app script up to the `window.__boots = {...}`
+// line (data and generator), without the UI code after it.
 export function load(htmlPath) {
   return loadPage(htmlPath);
 }
@@ -26,7 +28,11 @@ function die(msg) { console.error(msg); process.exit(2); }
 if (import.meta.url === "file://" + process.argv[1] || (process.argv[1] || "").endsWith("gen.mjs")) {
   const args = process.argv.slice(2);
   const htmlPath = args.shift();
-  if (!htmlPath) die("usage: gen.mjs <html> <pm> [--rc-off] [--paste] <ids...|all> | --list | --combos | --dump DIR");
+  if (!htmlPath) die("usage: gen.mjs <html> <pm> [--rc-off] [--paste] <ids...|all> | --list | --combos | --dump DIR | --check-page");
+  if (args[0] === "--check-page") {
+    try { console.log(`page scripts: ${checkPage(fs.readFileSync(htmlPath, "utf8"), htmlPath)} inline script(s) parse`); process.exit(0); }
+    catch (e) { console.error(e.message); process.exit(1); }
+  }
   const { boots, snipNames, snips } = load(htmlPath);
   const allIds = boots.TOOLS.map(t => t.id);
   const pms = Object.keys(boots.PM);

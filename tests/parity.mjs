@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// parity.mjs <html> [--random N] [--seed S] [--jobs J] [--combos FILE]
+// parity.mjs <html> [--random N] [--seed S] [--jobs J] [--combos FILE] [--installer DIR]
 // Builds install.sh from <html> (scripts/build-installer.mjs) and checks that `bash install.sh --print ...`
 // is byte-identical to the page's generate() (file mode) for a broad sample of selections, in both
 // argument forms (`<pm> <ids...> [--no-shell]` and `<combo>`). Only --print, --list and --help are run,
@@ -7,6 +7,8 @@
 // mode, and that tools.json and llms.txt match the page.
 //   --combos FILE  a saved `gen.mjs --combos` output: every combo in it must still decode to the same
 //                  selection (the script for it must match the page's script for its key).
+//   --installer DIR  test DIR/install.sh, tools.json and llms.txt (a built site version, e.g. the release's)
+//                  instead of building them from <html>; they must also equal a fresh build from <html>.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,19 +18,27 @@ import { buildInstaller } from "../scripts/build-installer.mjs";
 
 const args = process.argv.slice(2);
 const htmlPath = args.shift();
-if (!htmlPath) { console.error("usage: parity.mjs <html> [--random N] [--seed S] [--jobs J] [--combos FILE]"); process.exit(2); }
+if (!htmlPath) { console.error("usage: parity.mjs <html> [--random N] [--seed S] [--jobs J] [--combos FILE] [--installer DIR]"); process.exit(2); }
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const RANDOM = +opt("--random", 300), SEED = +opt("--seed", 1), JOBS = +opt("--jobs", Math.max(2, os.cpus().length));
-const COMBOS = opt("--combos", null);
+const COMBOS = opt("--combos", null), INSTALLER = opt("--installer", null);
 
 const { boots } = load(htmlPath);
 const { TOOLS, PM_ORDER } = boots;
 const NT = TOOLS.length;
 const allIds = TOOLS.map(t => t.id);
-const built = buildInstaller(htmlPath);
+const fresh = buildInstaller(htmlPath);
+const built = !INSTALLER ? fresh : {
+  installSh: fs.readFileSync(path.join(INSTALLER, "install.sh"), "utf8"),
+  toolsJson: fs.readFileSync(path.join(INSTALLER, "tools.json"), "utf8"),
+  llmsTxt: fs.readFileSync(path.join(INSTALLER, "llms.txt"), "utf8"),
+};
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parity-"));
 const SH = path.join(dir, "install.sh");
 fs.writeFileSync(SH, built.installSh);
+const fails = [];
+if (INSTALLER) for (const k of ["installSh", "toolsJson", "llmsTxt"])
+  if (built[k] !== fresh[k]) fails.push(`${INSTALLER}: ${k} differs from a fresh build of ${htmlPath}`);
 
 const run = (cmd, argv) => new Promise(res => {
   execFile(cmd, argv, { maxBuffer: 64 << 20, encoding: "utf8" }, (err, stdout, stderr) =>
@@ -68,7 +78,6 @@ for (let n = 0; n < RANDOM; n++) {
 }
 
 // ---- run
-const fails = [];
 let runs = 0;
 const firstDiff = (a, b) => {
   const A = a.split("\n"), B = b.split("\n");
@@ -121,6 +130,25 @@ await expectErr(["--print", "apt"], 2, /no tools given/);
 await expectErr(["--print", "apt-0"], 2, /picks no tools/);
 await expectErr(["--print", "apt-Q1"], 2, /not a combo ID/);
 await expectErr(["--print", "apt-12", "git"], 2, /takes no tool ids/);
+await expectErr(["--print", "apt-docker"], 2, /'apt-docker' is not a combo ID; did you mean: .*bash -s -- apt docker/);
+// combos whose digits spell a tool id or name: install.sh refuses them as typos, the page writes them
+// with a 0 after the dash (safeCombo), and that form must decode to the same selection
+{
+  const words = [...new Set(TOOLS.flatMap(t => [t.id, t.name.toLowerCase()]))].filter(w => /^[0-9a-z]+$/.test(w));
+  let n = 0;
+  for (const pm of ["apt", "apk"]) for (const w of words) {
+    const d = boots.decode(`${pm}-${w}`);
+    if (!d || d.newer || !d.picked.size || !boots.resolve(d.picked, pm).active.size) continue;
+    const ids = [...d.picked], rcOn = !d.rcOff, combo = boots.encode(pm, d.picked, d.rcOff);
+    if (combo !== `${pm}-${w}`) { fails.push(`${pm}-${w} re-encodes as ${combo}`); continue; }
+    if (boots.safeCombo(combo) !== `${pm}-0${w}`) fails.push(`page safeCombo(${combo}) is ${boots.safeCombo(combo)}`);
+    await expectErr(["--print", combo], 2, /is not a combo ID; did you mean/);
+    cases.push({ label: `spells:${w}`, pm, ids, rcOn, combo: `${pm}-0${w}` });
+    n++;
+  }
+  await pool(cases.slice(-n), check);
+  if (n < 10) fails.push(`only ${n} combos spelling a tool id were checked`);
+}
 await expectErr(["--print", "--list"], 2, /don't go together/);
 await expectErr(["--print", "--frobnicate", "apt", "git"], 2, /unknown option/);
 {
@@ -152,8 +180,13 @@ await expectErr(["--print", "--frobnicate", "apt", "git"], 2, /unknown option/);
   m.tools.forEach((t, i) => {
     if (t.id !== allIds[i] || t.index !== i || t.bit !== i + 1) fails.push(`tools.json: tools[${i}] is ${t.id} (index ${t.index}, bit ${t.bit})`);
     for (const pm of PM_ORDER) {
-      const h = boots.how(TOOLS[i], pm), e = t.pm[pm];
+      const T = TOOLS[i], h = boots.how(T, pm), e = t.pm[pm];
       if (!e || e.method !== via[h.type] || e.via !== h.via) fails.push(`tools.json: ${t.id} on ${pm}: ${JSON.stringify(e)} vs how() ${h.type}/${h.via}`);
+      // fallback: the upstream install behind a distro package; null where it exists but can't be used (noFallback)
+      const up = T.fn && (T.fn[pm] || T.fn["*"]);
+      const want = h.type !== "pkg" || !up ? undefined : h.fb ? JSON.stringify({ via: boots.VIA[h.fb], method: "upstream" }) : "null";
+      const got = e && "fallback" in e ? JSON.stringify(e.fallback) : undefined;
+      if (got !== want) fails.push(`tools.json: ${t.id} on ${pm}: fallback ${got} (want ${want})`);
     }
   });
   const grouped = m.groups.flatMap(g => g.tools);
