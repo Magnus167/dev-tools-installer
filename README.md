@@ -5,14 +5,37 @@ A quick one-command installer for common Linux dev tools (Ninite-inspired).
 **Live site: https://magnus167.github.io/dev-tools-installer/**
 
 Pick your package manager (apt, dnf, apk, pacman, zypper, or legacy yum), tick the tools you want, and
-paste the generated bash script into a fresh box. It installs what your distro packages natively, fetches
-the rest from each project's official releases into `~/.local/bin`, and can wire up your `.bashrc`/`.zshrc`.
-Every step skips tools already on your `PATH`, so re-running is safe. The whole app is one static
-`index.html` with no backend; the only build step is stamping the release version into it (see Releases).
+paste the generated bash script into a fresh box, or run the same script with one `curl` command. It
+installs what your distro packages natively, fetches the rest from each project's official releases into
+`~/.local/bin`, and can wire up your `.bashrc`/`.zshrc`. Every step skips tools already on your `PATH`, so
+re-running is safe. The whole app is one static `index.html` with no backend; the build stamps the release
+version and commit into it and generates the curl installer from it (see Releases).
 
 Your picks are encoded in a **combo ID** (for example `apt-1kx`) kept in the page URL, so a link always
 reproduces the same selection. Tools a package manager can't install are greyed out with the reason and
 left out of the script.
+
+## Command line
+
+`install.sh` builds the same script the page shows (byte for byte), saves it to a temp file and runs it:
+
+```sh
+curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- apt-1kx          # a combo ID from the page
+curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- apt git docker node   # or tool ids
+curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | sh -s -- apk git jq           # Alpine: sh, it adds bash first
+curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- --print apt-1kx  # print the script, run nothing
+curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- --list apt        # tool ids, and how each installs
+```
+
+`--no-shell` leaves PATH and tool hooks out of your rc file; `--help` has the rest. Use the versioned URL
+(`.../vX.Y.Z/install.sh`) to pin a release; the page's one-liner does. Exit status: 0 done, 1 something did
+not install, 2 bad arguments or a combo from a newer version (then nothing was changed). Under `sh` the
+installer fetches itself again from its own versioned URL and runs under bash (`BOOTS_INSTALL_URL`
+overrides that URL, for mirrors and tests).
+
+For AI assistants and scripts, each version also serves [`llms.txt`](https://magnus167.github.io/dev-tools-installer/llms.txt)
+(how to answer with a combo link or tool ids) and [`tools.json`](https://magnus167.github.io/dev-tools-installer/tools.json)
+(every tool, and how it installs with each package manager).
 
 ## Tools
 
@@ -32,7 +55,9 @@ left out of the script.
 | Network | nmap, mtr, traceroute, dig, whois, tcpdump, netcat, socat, iperf3 |
 
 Adding a tool: append it to the end of `TOOLS` in `index.html` (the list order *is* the combo encoding, so
-never reorder or delete entries) and place it in `GROUPS` wherever it should appear on the page.
+never reorder or delete entries) and place it in `GROUPS` wherever it should appear on the page. The curl
+installer picks it up from the page; a change to `generate()` itself needs the same change in its bash port,
+`scripts/install.sh.in` (`tests/parity.mjs` fails until the two agree).
 
 ## Releases
 
@@ -65,10 +90,34 @@ gh workflow run release.yml -f version=vX.Y.Z
 gh run watch
 ```
 
-The release workflow then deploys GitHub Pages. Every release stays online at its own path,
-`https://magnus167.github.io/dev-tools-installer/vX.Y.Z/`, and the site root (and `/latest/`) serves the newest
-one. `scripts/build-site.sh` builds that tree from the git tags and stamps each copy with its version (the
-page shows it in the footer and in every generated script's header); a build with no tags is labelled `dev`.
+Before tagging, the workflow builds the installer and runs `tests/parity.mjs` (it runs install.sh only with
+`--print`/`--list`/`--help`). It then creates the release, builds `install.sh`, `tools.json`, `llms.txt` and
+`SHA256SUMS` from the new tag, attaches them to the release, and deploys GitHub Pages. (A release created in
+the GitHub UI deploys Pages but gets no attached files.)
+
+Every release stays online at its own path, `https://magnus167.github.io/dev-tools-installer/vX.Y.Z/`, and
+the site root (and `/latest/`) serves the newest one. `scripts/build-site.sh` builds that tree from the git
+tags and stamps each copy with its version and the tag's full commit sha (the page shows the version in the
+footer; every generated script's header carries version, short commit, page link and source repo); a build
+with no tags is labelled `dev`. Per version:
+
+| File | What |
+|---|---|
+| `index.html` | the page |
+| `install.sh` | the curl installer, generated from that version's page by `scripts/build-installer.mjs` |
+| `tools.json` | machine-readable manifest: package managers, groups, tools, how each installs per package manager, combo format |
+| `llms.txt` | how an AI assistant should answer with this site ([llms.txt](https://llmstxt.org) convention) |
+| `SHA256SUMS` | sha256 of the four files above |
+
+Tags from before the installer (v1.0.0) have only `index.html`. Each version's files are built by that
+tag's own `scripts/build-installer.mjs`, so they do not change when the build scripts change later. Check a
+download against the release:
+
+```sh
+curl -fsSLO https://magnus167.github.io/dev-tools-installer/vX.Y.Z/install.sh
+gh release download vX.Y.Z --repo Magnus167/dev-tools-installer --pattern SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+```
 
 ## Tests
 
@@ -78,7 +127,10 @@ install runs inside throwaway Docker containers. See [`tests/README.md`](tests/R
 ```sh
 node tests/gen.mjs index.html apt all             # print a script
 node tests/gen.mjs index.html --combos            # combo IDs + encode/decode round-trip
-tests/lint.sh index.html                          # bash -n on every script, shellcheck (in Docker)
+node tests/parity.mjs index.html                  # install.sh --print == the page's script, for ~1400 selections
+tests/lint.sh index.html                          # bash -n on every script, shellcheck (in Docker), incl. install.sh
+tests/installer-e2e.sh index.html                 # curl | bash and | sh installs + error paths, in containers
+node scripts/build-installer.mjs index.html out/  # write install.sh, tools.json, llms.txt (as "dev")
 tests/matrix.sh index.html --ids all --jobs 4 --timeout 60   # install everything in 11 distro containers
 tests/matrix.sh index.html --ids all --timeout 60 --user --images ubuntu:24.04   # same, as a non-root sudo user
 ```

@@ -1,0 +1,444 @@
+#!/bin/sh
+# shellcheck shell=bash disable=SC1112  # (SC1112: the data below has typographic quotes in plain text)
+# boots-installer: dev-tools-installer @VERSION@ (commit @COMMIT@)
+#   curl -fsSL @SELF_URL@ | bash -s -- <combo | pm tool-id...>    (--help for more)
+# Page: @SITE_HERE@   Source: @REPO@
+# Generated from that version's index.html by scripts/build-installer.mjs: it builds the same script
+# the page shows for the same selection (--print prints it), saves it to a temp file and runs it.
+#
+# This first part is POSIX sh. Under any shell but bash (Alpine has no bash) it installs bash if
+# needed (apk) and runs this installer again under bash. Everything after it is bash.
+
+boots_usage() {
+  cat <<'BOOTS_HELP'
+@HELP@
+BOOTS_HELP
+}
+
+if [ -z "${BASH_VERSION:-}" ]; then
+  boots_file=""
+  if [ -f "$0" ] && grep -q '^# boots-installer: ' "$0" 2>/dev/null; then boots_file=$0
+  # piped (curl ... | sh): read the rest of the script, which sh never runs, so the download finishes
+  # cleanly instead of failing on a closed pipe; the bash part is fetched again below
+  elif [ ! -t 0 ]; then cat >/dev/null 2>&1
+  fi
+  for boots_a in "$@"; do
+    case $boots_a in -h|--help) boots_usage; exit 0 ;; esac
+  done
+  if [ "$#" -eq 0 ]; then boots_usage >&2; exit 2; fi
+  if ! command -v bash >/dev/null 2>&1; then
+    for boots_a in "$@"; do
+      case $boots_a in
+        --print|--list)
+          echo "install.sh: $boots_a needs bash, which is not installed here; nothing was changed." >&2
+          echo "install.sh: install bash first, or open @SITE_HERE@ to see the script in the page." >&2
+          exit 1 ;;
+      esac
+    done
+    if command -v apk >/dev/null 2>&1; then
+      echo "==> installing bash, which this installer needs"
+      if [ "$(id -u)" -eq 0 ]; then apk add bash
+      elif command -v doas >/dev/null 2>&1; then doas apk add bash
+      elif command -v sudo >/dev/null 2>&1; then sudo apk add bash
+      else echo "install.sh: installing bash needs root, doas or sudo" >&2; false
+      fi || exit 1
+    else
+      echo "install.sh: this installer needs bash; install it and run this again" >&2
+      exit 1
+    fi
+  fi
+  # run from a file (sh install.sh ...): hand the same file to bash
+  if [ -n "$boots_file" ]; then exec bash "$boots_file" "$@"; fi
+  # piped (curl ... | sh -s -- ...): fetch this same version again and run it under bash
+  boots_url="${BOOTS_INSTALL_URL:-@SELF_URL@}"
+  boots_tmp="$(mktemp "${TMPDIR:-/tmp}/boots-installer.XXXXXX")" || exit 1
+  if command -v curl >/dev/null 2>&1; then curl -fsSL "$boots_url" -o "$boots_tmp"
+  elif command -v wget >/dev/null 2>&1; then wget -qO "$boots_tmp" "$boots_url"
+  else echo "install.sh: curl or wget is needed to fetch $boots_url" >&2; false
+  fi || { echo "install.sh: could not fetch $boots_url" >&2; rm -f "$boots_tmp"; exit 1; }
+  bash "$boots_tmp" "$@"
+  boots_rc=$?
+  rm -f "$boots_tmp"
+  exit "$boots_rc"
+fi
+
+# ==================================================================== bash from here on (3.2 or newer)
+# bash started as sh runs in POSIX mode; the code below wants normal bash
+set +o posix 2>/dev/null
+
+# ---------------------------------------------------------------- data (generated from index.html)
+@DATA@
+
+# ---------------------------------------------------------------- helpers
+NT=${#T_ID[@]}
+B36=0123456789abcdefghijklmnopqrstuvwxyz
+# The combo bitmask is wider than bash's 64-bit integers, so it is kept as little-endian 24-bit limbs.
+LIMB=24
+LIMB_MASK=16777215
+
+boots_die() { echo "install.sh: $*" >&2; exit 2; }
+
+is_pm() { local p; for p in "${PM_IDS[@]}"; do [ "$p" = "$1" ] && return 0; done; return 1; }
+
+tool_index() { # tool_index <id>: its index in TOOLS, in REPLY
+  local i
+  for ((i = 0; i < NT; i++)); do
+    if [ "${T_ID[i]}" = "$1" ]; then REPLY=$i; return 0; fi
+  done
+  return 1
+}
+
+big_from_b36() { # big_from_b36 <digits>: BIG = that base-36 number
+  local s=$1 i j d v carry
+  BIG=(0)
+  for ((i = 0; i < ${#s}; i++)); do
+    d=${B36%%"${s:i:1}"*}; carry=${#d}
+    for ((j = 0; j < ${#BIG[@]}; j++)); do
+      v=$(( BIG[j] * 36 + carry ))
+      BIG[j]=$(( v & LIMB_MASK )); carry=$(( v >> LIMB ))
+    done
+    while (( carry > 0 )); do BIG+=( $(( carry & LIMB_MASK )) ); carry=$(( carry >> LIMB )); done
+  done
+}
+
+big_to_b36() { # BIG in base 36, in REPLY
+  local -a n=("${BIG[@]}")
+  local out="" i r v nz
+  while :; do
+    nz=0
+    for v in "${n[@]}"; do if (( v )); then nz=1; break; fi; done
+    (( nz )) || break
+    r=0
+    for ((i = ${#n[@]} - 1; i >= 0; i--)); do
+      v=$(( (r << LIMB) + n[i] )); n[i]=$(( v / 36 )); r=$(( v % 36 ))
+    done
+    out=${B36:r:1}$out
+  done
+  REPLY=${out:-0}
+}
+
+big_bit() { (( (BIG[$1 / LIMB] >> ($1 % LIMB)) & 1 )); }
+
+big_top() { # highest set bit of BIG (-1 for zero), in REPLY
+  local j=$(( ${#BIG[@]} - 1 )) b
+  while (( j >= 0 )) && (( BIG[j] == 0 )); do j=$(( j - 1 )); done
+  if (( j < 0 )); then REPLY=-1; return; fi
+  b=$(( LIMB - 1 ))
+  while (( ((BIG[j] >> b) & 1) == 0 )); do b=$(( b - 1 )); done
+  REPLY=$(( j * LIMB + b ))
+}
+
+combo_of() { # combo_of <pm> <rc_on>: the combo ID of SEL, as encode() in the page, in REPLY
+  local i b
+  BIG=()
+  for ((i = 0; i <= (NT + 1) / LIMB; i++)); do BIG[i]=0; done
+  if [ "$2" != 1 ]; then BIG[0]=1; fi
+  for ((i = 0; i < NT; i++)); do
+    if [ -n "${SEL[i]}" ]; then b=$(( i + 1 )); BIG[b / LIMB]=$(( BIG[b / LIMB] | (1 << (b % LIMB)) )); fi
+  done
+  big_to_b36
+  REPLY="$1-$REPLY"
+}
+
+lev() { # lev <a> <b>: edit distance, in REPLY
+  local a=$1 b=$2 i j c best
+  local -a prev row
+  for ((j = 0; j <= ${#b}; j++)); do prev[j]=$j; done
+  for ((i = 1; i <= ${#a}; i++)); do
+    row=("$i")
+    for ((j = 1; j <= ${#b}; j++)); do
+      if [ "${a:i-1:1}" = "${b:j-1:1}" ]; then c=0; else c=1; fi
+      best=$(( prev[j - 1] + c ))
+      (( prev[j] + 1 < best )) && best=$(( prev[j] + 1 ))
+      (( row[j - 1] + 1 < best )) && best=$(( row[j - 1] + 1 ))
+      row[j]=$best
+    done
+    prev=("${row[@]}")
+  done
+  REPLY=${prev[${#b}]}
+}
+
+suggest() { # suggest <word>: tool ids that look like it, in REPLY
+  local q i out="" max
+  q=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  for ((i = 0; i < NT; i++)); do
+    if [ "${T_BIN[i]}" = "$q" ] || [[ "$q" == *"${T_ID[i]}"* ]] || { (( ${#q} >= 3 )) && [[ "${T_HAY[i]}" == *"$q"* ]]; }; then
+      out+=", ${T_ID[i]}"; continue
+    fi
+    max=1; (( ${#T_ID[i]} > 5 )) && max=2
+    lev "$q" "${T_ID[i]}"
+    (( REPLY <= max )) && out+=", ${T_ID[i]}"
+  done
+  REPLY=${out#, }
+}
+
+how_text() { # how_text <i>: how tool i installs with the loaded pm, in REPLY
+  local i=$1 r names=""
+  case ${H_TYPE[i]} in
+    pkg)  REPLY="$P_ID: ${H_PKGS[i]}"; [ -n "${H_FB[i]}" ] && REPLY+=" (else upstream: ${H_FBVIA[i]})" ;;
+    fn)   REPLY="upstream: ${H_VIA[i]}" ;;
+    rc)   REPLY="shell function" ;;
+    skip) REPLY="unavailable: ${H_WHY[i]}"; return ;;
+  esac
+  for r in ${T_REQ[i]}; do names+=", ${T_ID[r]}"; done
+  [ -n "$names" ] && REPLY+=" (needs ${names#, })"
+}
+
+list_tools() { # list_tools [pm]: the tool table
+  local pm=$1 g i w1=2 w2=4 w3=5
+  if [ -n "$pm" ]; then pm_load "$pm"; fi
+  for ((i = 0; i < NT; i++)); do
+    (( ${#T_ID[i]} > w1 )) && w1=${#T_ID[i]}
+    (( ${#T_NAME[i]} > w2 )) && w2=${#T_NAME[i]}
+    (( ${#T_GROUP[i]} > w3 )) && w3=${#T_GROUP[i]}
+  done
+  if [ -n "$pm" ]; then
+    printf "%-${w1}s  %-${w2}s  %-${w3}s  %s\n" ID NAME GROUP "WITH $pm"
+  else
+    printf "%-${w1}s  %-${w2}s  %-${w3}s  %s\n" ID NAME GROUP DESCRIPTION
+  fi
+  for ((g = 0; g < ${#G_NAME[@]}; g++)); do
+    for i in ${G_TOOLS[g]}; do
+      if [ -n "$pm" ]; then how_text "$i"; else REPLY=${T_DESC[i]}; fi
+      printf "%-${w1}s  %-${w2}s  %-${w3}s  %s\n" "${T_ID[i]}" "${T_NAME[i]}" "${T_GROUP[i]}" "$REPLY"
+    done
+  done
+}
+
+# ---------------------------------------------------------------- the generator
+# How each tool installs with a pm comes precomputed from the page's how() (pm_load). Below is a
+# line-for-line port of resolve() and generate() in index.html; tests/parity.mjs checks that the
+# two give byte-identical scripts.
+
+resolve_sel() { # SEL (picked) -> ALL (picked + their requirements) and ACT (what gets installed)
+  local i r
+  ALL=(); ACT=()
+  for ((i = 0; i < NT; i++)); do
+    [ -n "${SEL[i]}" ] || continue
+    ALL[i]=1
+    [ "${H_TYPE[i]}" = skip ] && continue
+    for r in ${T_REQ[i]}; do ALL[r]=1; done
+  done
+  for ((i = 0; i < NT; i++)); do
+    if [ -n "${ALL[i]}" ] && [ "${H_TYPE[i]}" != skip ]; then ACT[i]=1; fi
+  done
+}
+
+emit() { local x; for x in "$@"; do S+=$x$'\n'; done; }
+
+rc_block() { # rc_block <name> <body>: as rcBlock() in the page, in REPLY
+  local nl=$'\n'
+  REPLY="if grep -qF '# boots-on-the-ground: $1' \"\$RC\"; then${nl}  echo \"    $1: already in \$RC\"${nl}else${nl}cat >> \"\$RC\" <<'RC_EOF'${nl}${nl}# boots-on-the-ground: $1${nl}$2${nl}RC_EOF${nl}  echo \"    $1: added\"${nl}fi"
+}
+
+gen_script() { # gen_script <pm> <rc_on> <combo>: the install script for ACT/ALL, in REPLY
+  local pm=$1 rc_on=$2 combo=$3 nl=$'\n' IFS=$' \t\n' S="" i k pass need_build="" cur="" next base joined
+  local -a tools=() left=() pkgs=() soft=() pres=() posts=() fns=() fbs=() bodies=() rcs=() names=() lines=() blocks=() bins=()
+  for ((i = 0; i < NT; i++)); do
+    if [ -n "${ACT[i]}" ]; then tools+=("$i")
+    elif [ -n "${ALL[i]}" ]; then left+=("$i"); fi
+  done
+  for i in "${tools[@]}"; do
+    [ -n "${T_BUILD[i]}" ] && need_build=1
+    case ${H_TYPE[i]} in
+      pkg)
+        pkgs+=("${H_PKGS[i]}")
+        if [ -n "${H_PRE[i]}" ]; then snip "${H_PRE[i]}"; pres+=("$REPLY"); fi
+        if [ -n "${H_POST[i]}" ]; then snip "${H_POST[i]}"; posts+=("$REPLY"); fi
+        # only the first package (the one that provides the binary) is covered by the fallback
+        if [ -n "${H_FB[i]}" ]; then fbs+=("$i"); soft+=("${H_PKGS[i]%% *}"); snip "${H_FB[i]}"; bodies+=("$REPLY"); fi ;;
+      fn) fns+=("$i"); snip "${H_FN[i]}"; bodies+=("$REPLY") ;;
+      rc) rcs+=("$i") ;;
+    esac
+  done
+
+  for i in "${tools[@]}"; do names+=("${T_NAME[i]%% *}"); done
+  emit "#!/usr/bin/env bash" "# Boots on the ground: generated install script" \
+    "# generated by dev-tools-installer $BOOTS_VERSION (commit $BOOTS_COMMIT_SHORT)" \
+    "# $BOOTS_SITE_HERE#$combo" "# source: $BOOTS_REPO" "# combo:  $combo" \
+    "# system: $pm ($P_DISTROS), x86_64 or aarch64"
+  for k in "${names[@]}"; do # wrapList(names, 70)
+    if [ -n "$cur" ]; then next="$cur, $k"; else next=$k; fi
+    if (( ${#next} > 70 )) && [ -n "$cur" ]; then lines+=("$cur,"); cur=$k; else cur=$next; fi
+  done
+  [ -n "$cur" ] && lines+=("$cur")
+  for ((k = 0; k < ${#lines[@]}; k++)); do
+    if (( k )); then emit "#         ${lines[k]}"; else emit "# tools:  ${lines[k]}"; fi
+  done
+  if (( ${#left[@]} )); then
+    emit "# left out, not available with $pm:"
+    for i in "${left[@]}"; do emit "#   ${T_NAME[i]}: ${H_WHY[i]}"; done
+  fi
+  emit "#" "# Read it before you run it. System packages need sudo or doas;" \
+    '# everything else lands under $HOME (mostly ~/.local/bin) or in /usr/local/go.' \
+    "set -uo pipefail" ""
+  snip preamble; emit "$REPLY" ""
+  if (( ${#bodies[@]} )); then snip helpers; emit "$REPLY" ""; fi
+
+  emit "# ---------------------------------------------------------------- system packages" \
+    "pm_refresh() { $P_REFRESH; }" "pm_try() { $P_INSTALL; }"
+  snip pm-install; emit "$REPLY"
+  emit "" 'echo "==> system packages"' 'pm_refresh || FAILED+=("package index refresh")'
+  base=$P_BASE; [ -n "$need_build" ] && base+=" $P_BUILD"
+  emit "pm_install $base"' || FAILED+=("base packages: ${PKG_FAILED[*]}")'
+  if (( ${#pres[@]} )); then
+    emit "" "# extra package repos" "${pres[@]}" 'pm_refresh || FAILED+=("package index refresh")'
+  fi
+  if (( ${#pkgs[@]} )); then
+    emit ""
+    if (( ${#soft[@]} )); then
+      emit "# packages with an upstream fallback below, used if the distro lacks them" "PKG_SOFT=\" ${soft[*]} \""
+    fi
+    emit "if ! pm_install ${pkgs[*]}; then" '  for p in "${PKG_FAILED[@]}"; do'
+    if (( ${#soft[@]} )); then emit '    case "$PKG_SOFT" in *" $p "*) continue ;; esac'; fi
+    emit '    FAILED+=("$p package")' "  done" "fi"
+  fi
+  if (( ${#posts[@]} )); then emit "" "${posts[@]}"; fi
+
+  if (( ${#bodies[@]} )); then
+    emit "" "# ---------------------------------------------------------------- upstream installs"
+    for k in "${bodies[@]}"; do emit "$k" ""; done
+    if (( ${#fbs[@]} )); then snip fallback; emit "$REPLY" ""; fi
+    emit "echo" 'echo "==> upstream installs"'
+    for i in "${fns[@]}"; do emit "step ${T_ID[i]} install_${T_ID[i]}"; done
+    for i in "${fbs[@]}"; do emit "fallback ${T_ID[i]} install_${T_ID[i]} ${T_BIN[i]}"; done
+  fi
+
+  # shell setup: PATH and `init` hooks follow rc_on, except initAlways ones; initUpstreamOnly hooks
+  # only with the upstream method; initLast hooks after all others; `rc` functions always
+  if [ "$rc_on" = 1 ]; then snip rc-path; rc_block path "$REPLY"; blocks+=("$REPLY"); fi
+  for pass in "" 1; do
+    for i in "${tools[@]}"; do
+      [ -n "${T_INIT[i]}" ] && [ "${T_INITLAST[i]}" = "$pass" ] || continue
+      [ "$rc_on" = 1 ] || [ -n "${T_INITALWAYS[i]}" ] || continue
+      [ -n "${T_INITUP[i]}" ] && [ "${H_TYPE[i]}" != fn ] && continue
+      snip "${T_INIT[i]}"; rc_block "${T_ID[i]}" "$REPLY"; blocks+=("$REPLY")
+    done
+  done
+  for i in "${rcs[@]}"; do snip "${T_RC[i]}"; rc_block "${T_ID[i]}" "$REPLY"; blocks+=("$REPLY"); done
+  if (( ${#blocks[@]} )); then
+    joined=${blocks[0]}
+    for ((k = 1; k < ${#blocks[@]}; k++)); do joined+=$nl$nl${blocks[k]}; done
+    snip rc-head
+    emit "" "# ---------------------------------------------------------------- shell setup"
+    emit "echo" 'echo "==> shell setup"' "$REPLY" "" "$joined"
+  fi
+  if [ -n "$T_DOCKER" ] && [ -n "${ACT[T_DOCKER]}" ]; then
+    snip docker-group; emit "" "echo" 'echo "==> docker group"' "$REPLY"
+  fi
+
+  for i in "${tools[@]}"; do [ -n "${T_BIN[i]}" ] && bins+=("${T_BIN[i]}"); done
+  emit "" "# ---------------------------------------------------------------- check" "echo" 'echo "==> check"'
+  if (( ${#bins[@]} )); then
+    emit "for t in ${bins[*]}; do" \
+      "  if have \"\$t\"; then printf '    ok       %s\\n' \"\$t\"; else printf '    missing  %s\\n' \"\$t\"; FAILED+=(\"\$t missing\"); fi" \
+      "done"
+  fi
+  if (( ${#rcs[@]} )); then
+    k=""; for i in "${rcs[@]}"; do k+=" ${T_ID[i]}"; done
+    emit "for f in ${k# }; do" \
+      "  if grep -qF \"# boots-on-the-ground: \$f\" \"\$RC\"; then printf '    ok       %s (in %s)\\n' \"\$f\" \"\$RC\"; else printf '    missing  %s\\n' \"\$f\"; fi" \
+      "done"
+  fi
+  emit "" "echo" 'if [ "${#FAILED[@]}" -eq 0 ]; then' \
+    '  echo "==> done. Open a new shell to pick up PATH and rc changes."' "else" \
+    '  echo "==> finished with problems: ${FAILED[*]}" >&2' "  exit 1" "fi"
+  REPLY=$S
+}
+
+# ---------------------------------------------------------------- main
+boots_main() {
+  local mode=run rc_on=1 a pm digits combo i bad="" f picked="" ok
+  local -a pos=()
+  SEL=()
+  for a in "$@"; do
+    case $a in
+      -h|--help) boots_usage; return 0 ;;
+      --print) [ "$mode" = list ] && boots_die "--print and --list don't go together"; mode=print ;;
+      --list) [ "$mode" = print ] && boots_die "--print and --list don't go together"; mode=list ;;
+      --no-shell) rc_on=0 ;;
+      --) ;;
+      -*) boots_die "unknown option $a (see --help)" ;;
+      *) pos+=("$a") ;;
+    esac
+  done
+
+  if [ "$mode" = list ]; then
+    (( ${#pos[@]} <= 1 )) || boots_die "--list takes at most one package manager"
+    if (( ${#pos[@]} )) && ! is_pm "${pos[0]}"; then boots_die "unknown package manager '${pos[0]}' (one of: ${PM_LIST[*]})"; fi
+    list_tools "${pos[0]}"
+    return 0
+  fi
+  if (( ${#pos[@]} == 0 )); then boots_usage >&2; exit 2; fi
+
+  a=${pos[0]}
+  case $a in
+    *-*) # a combo ID: <pm>-<base 36 bitmask>
+      pm=${a%%-*}; digits=${a#*-}
+      is_pm "$pm" || boots_die "'$a' is not a combo ID: '$pm' is not a package manager (one of: ${PM_LIST[*]})"
+      case $digits in ''|*[!0-9a-z]*) boots_die "'$a' is not a combo ID (expected $pm- and then digits and lowercase letters)" ;; esac
+      (( ${#digits} <= 64 )) || boots_die "'$a' is too long to be a combo ID"
+      (( ${#pos[@]} == 1 )) || boots_die "a combo ID takes no tool ids (got: ${pos[*]:1})"
+      big_from_b36 "$digits"; big_top
+      if (( REPLY > NT )); then
+        boots_die "this combo needs a newer version: ${BOOTS_SITE}install.sh (this is $BOOTS_VERSION, which knows $NT tools)"
+      fi
+      big_bit 0 && rc_on=0
+      for ((i = 0; i < NT; i++)); do big_bit $(( i + 1 )) && SEL[i]=1; done
+      (( ${#SEL[@]} )) || boots_die "the combo $a picks no tools"
+      ;;
+    *)
+      if ! is_pm "$a"; then
+        tool_index "$a" && boots_die "start with the package manager, e.g. apt $a (one of: ${PM_LIST[*]})"
+        ok=""
+        if (( ${#a} >= 3 )); then # a distro name: say which package manager it uses
+          f=$(printf '%s' "$a" | tr '[:upper:]' '[:lower:]')
+          for i in "${!PM_IDS[@]}"; do
+            case "$(printf '%s' "${PM_DISTROS[i]}" | tr '[:upper:]' '[:lower:]')" in *"$f"*) ok+=" ${PM_IDS[i]}" ;; esac
+          done
+        fi
+        [ -n "$ok" ] && boots_die "'$a' is not a package manager; for $a use:${ok}"
+        boots_die "'$a' is not a package manager or a combo ID (package managers: ${PM_LIST[*]})"
+      fi
+      pm=$a
+      (( ${#pos[@]} > 1 )) || boots_die "no tools given; e.g. $pm git jq (see --list $pm)"
+      for a in "${pos[@]:1}"; do
+        if tool_index "$a"; then SEL[REPLY]=1; continue; fi
+        suggest "$a"
+        if [ -n "$REPLY" ]; then echo "install.sh: unknown tool id '$a'; did you mean: $REPLY" >&2
+        else echo "install.sh: unknown tool id '$a'" >&2; fi
+        bad=1
+      done
+      [ -z "$bad" ] || boots_die "see all tool ids with --list"
+      ;;
+  esac
+
+  pm_load "$pm"
+  resolve_sel
+  if (( ${#ACT[@]} == 0 )); then
+    for i in "${!ALL[@]}"; do echo "install.sh:   ${T_NAME[i]}: ${H_WHY[i]}" >&2; done
+    boots_die "nothing to install: none of these tools is available with $pm"
+  fi
+  combo_of "$pm" "$rc_on"; combo=$REPLY
+  gen_script "$pm" "$rc_on" "$combo"
+  if [ "$mode" = print ]; then printf '%s' "$REPLY"; return 0; fi
+
+  # ---- install: check the system, save the script, run it
+  a=$pm; [ "$pm" = apt ] && a=apt-get
+  if ! command -v "$a" >/dev/null 2>&1; then
+    boots_die "$combo is for $pm ($P_DISTROS), but there is no $a here; nothing was changed (see --help for package managers)"
+  fi
+  f=$(mktemp "${TMPDIR:-/tmp}/boots-install.XXXXXX") || { echo "install.sh: could not create a temp file" >&2; exit 1; }
+  printf '%s' "$REPLY" > "$f" || { echo "install.sh: could not write $f" >&2; exit 1; }
+  for i in "${!ACT[@]}"; do picked+=", ${T_NAME[i]%% *}"; done
+  echo "==> dev-tools-installer $BOOTS_VERSION (commit $BOOTS_COMMIT_SHORT), $pm: ${picked#, }"
+  for i in "${!ALL[@]}"; do
+    [ -n "${ACT[i]}" ] || echo "    left out, not available with $pm: ${T_NAME[i]} (${H_WHY[i]})"
+  done
+  echo "==> running the generated script, saved as $f"
+  echo "    (to read it without running anything: ... | bash -s -- --print $combo)"
+  echo
+  if { : </dev/tty; } 2>/dev/null; then bash "$f" </dev/tty; else bash "$f" </dev/null; fi
+}
+
+boots_main "$@"; exit $?

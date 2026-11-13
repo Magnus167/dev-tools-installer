@@ -40,10 +40,35 @@ jobs:
             echo "::error::tag $VERSION already exists"
             exit 1
           fi
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      # Before anything is tagged: the installer must build, and its --print output must match the
+      # page's script byte for byte (runs install.sh with --print/--list/--help only; installs nothing).
+      - name: Check the installer builds and matches the page
+        run: |
+          node scripts/build-installer.mjs index.html "$RUNNER_TEMP/preflight"
+          node tests/parity.mjs index.html
       - name: Create release
         run: |
           gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --generate-notes --title "$VERSION"
+      # Built from the tag the release just created, the same way pages.yml builds the site, so the
+      # attached files are byte-identical to the ones served at <site>/vX.Y.Z/.
+      - name: Build install.sh, tools.json, llms.txt, SHA256SUMS from the tag
+        run: |
+          git fetch --force origin "refs/tags/$VERSION:refs/tags/$VERSION"
+          test "$(git rev-parse "$VERSION^{commit}")" = "$GITHUB_SHA"
+          bash scripts/build-site.sh "$RUNNER_TEMP/site"
+          cd "$RUNNER_TEMP/site/$VERSION"
+          sha256sum -c SHA256SUMS
+          grep -q "^BOOTS_VERSION=$VERSION\$" install.sh
+      - name: Attach them to the release
+        run: |
+          d="$RUNNER_TEMP/site/$VERSION"
+          gh release upload "$VERSION" --repo "$GITHUB_REPOSITORY" \
+            "$d/install.sh" "$d/tools.json" "$d/llms.txt" "$d/SHA256SUMS"
 
   pages:
     needs: release

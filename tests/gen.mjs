@@ -6,39 +6,12 @@
 //        gen.mjs <html> --dump <dir>      (lint helper: writes <dir>/<pm>/{all,all-norc,<id>}.sh)
 import fs from "node:fs";
 import path from "node:path";
-import vm from "node:vm";
+import { loadPage } from "../scripts/build-installer.mjs";
 
+// The page is evaluated by scripts/build-installer.mjs's loader: the app script up to the
+// `window.__boots = {...}` line (data and generator), without the UI code after it.
 export function load(htmlPath) {
-  const html = fs.readFileSync(htmlPath, "utf8");
-  const snips = [];
-  const re = /<script([^>]*)>([\s\S]*?)<\/script>/g;
-  let m, app = null;
-  while ((m = re.exec(html))) {
-    const attrs = m[1], sn = /data-snip="([^"]+)"/.exec(attrs);
-    if (sn) snips.push({ name: sn[1], text: m[2] });
-    else if (!/\bsrc=/.test(attrs) && !/type="text\/plain"/.test(attrs)) app = m[2];
-  }
-  if (!app) throw new Error("no app <script> found in " + htmlPath);
-  const noop = () => undefined;
-  const stub = () => new Proxy({
-    innerHTML: "", textContent: "", value: "", checked: false, disabled: false,
-    dataset: {}, style: {}, classList: { toggle: noop, add: noop, remove: noop },
-    addEventListener: noop, setAttribute: noop, appendChild: noop, remove: noop,
-    querySelector: () => stub(), querySelectorAll: () => [],
-  }, { get: (t, k) => (k in t ? t[k] : noop), set: (t, k, v) => ((t[k] = v), true) });
-  const document = {
-    querySelectorAll: sel => sel === "script[data-snip]"
-      ? snips.map(s => ({ dataset: { snip: s.name }, textContent: s.text })) : [],
-    querySelector: () => stub(),
-    createElement: () => stub(), body: stub(),
-  };
-  const ctx = { document, location: { hash: "", replace: noop }, navigator: {}, getSelection: noop,
-    setTimeout, console };
-  ctx.window = ctx; ctx.addEventListener = noop;
-  vm.createContext(ctx);
-  vm.runInContext(app, ctx, { filename: htmlPath + "#app" });
-  if (!ctx.__boots) throw new Error("window.__boots not exposed");
-  return { boots: ctx.__boots, snipNames: snips.map(s => s.name), snips };
+  return loadPage(htmlPath);
 }
 
 export function build(boots, pm, ids, { rcOn = true, paste = false } = {}) {

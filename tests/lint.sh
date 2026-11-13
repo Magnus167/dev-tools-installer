@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# lint.sh <html>: bash -n on every generated script, shellcheck (Docker) on the all-tools scripts.
+# lint.sh <html>: bash -n on every generated script, shellcheck (Docker) on the all-tools scripts and on
+# the curl installer (scripts/build-installer.mjs output).
 # Exit non-zero on any failure. Set SC_SEVERITY (default: warning) to change the failing level.
 set -u
 HTML="${1:?usage: lint.sh <html>}"
@@ -31,6 +32,24 @@ for pm in apt dnf yum apk pacman zypper; do
   done
 done
 echo "shellcheck (>= $SEV): $nsc scripts, $badsc with findings"
+# the curl installer: bash -n, shellcheck as bash, and its POSIX bootstrap (up to the "bash from here on"
+# line) parsed by sh -n (parse only) and shellchecked as sh
+mkdir -p "$OUT/installer"
+if node "$HERE/../scripts/build-installer.mjs" "$HTML" "$OUT/installer" >/dev/null; then
+  I="$OUT/installer/install.sh"
+  sed -n '1,/bash from here on/p' "$I" | grep -v '^# shellcheck shell=' > "$OUT/installer/bootstrap.sh"
+  err="$(bash -n "$I" 2>&1)" || { echo "SYNTAX install.sh: $err"; fail=1; }
+  err="$(sh -n "$OUT/installer/bootstrap.sh" 2>&1)" || { echo "SYNTAX install.sh bootstrap (sh): $err"; fail=1; }
+  for v in bash:install.sh sh:bootstrap.sh; do
+    if ! res="$(docker run --rm -v "$OUT/installer:/mnt:ro" koalaman/shellcheck:stable -s "${v%%:*}" -S "$SEV" -f gcc "/mnt/${v#*:}" 2>&1)"; then
+      fail=1; echo "SHELLCHECK ${v#*:} as ${v%%:*} (>= $SEV):"; echo "$res" | sed 's/^/  /'
+    fi
+  done
+  echo "install.sh: bash -n, sh -n on the bootstrap, shellcheck (>= $SEV) as bash and bootstrap as sh: done"
+else
+  echo "INSTALLER: build-installer.mjs failed"; fail=1
+fi
+
 # informational: everything below the threshold, one pm (scripts differ little between pms)
 info="$(docker run --rm -v "$OUT/apt:/mnt:ro" koalaman/shellcheck:stable -s bash -S style -f gcc /mnt/all.sh 2>&1 | grep -c ': \(note\|style\|info\)')"
 echo "shellcheck info/style notes on apt/all (informational): $info"
