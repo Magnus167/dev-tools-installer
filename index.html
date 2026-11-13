@@ -4,277 +4,527 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Boots on the ground: one script for a fresh Linux box</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="description" content="Pick your Linux package manager (apt, dnf, apk, pacman, zypper or yum) and the developer tools you want, then install them with one curl command or a bash script you can read first. For AI assistants and scripts: llms.txt, tools.json and install.sh sit next to this page.">
+<meta name="color-scheme" content="light">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Cpath fill='%231B2433' d='M3 1h7v1H3zM3 2h1v1H3zM9 2h1v1H9zM3 3h1v1H3zM9 3h1v1H9zM3 4h1v1H3zM9 4h1v1H9zM3 5h1v1H3zM9 5h1v1H9zM3 6h1v1H3zM9 6h1v1H9zM3 7h1v1H3zM9 7h2v1H9zM3 8h1v1H3zM11 8h2v1H11zM3 9h1v1H3zM13 9h1v1H13zM3 10h1v1H3zM14 10h1v1H14zM3 11h1v1H3zM15 11h1v1H15zM3 12h1v1H3zM15 12h1v1H15zM3 13h1v1H3zM7 13h8v1H7zM3 14h5v1H3z'/%3E%3Cpath fill='%236E4320' d='M4 2h5v1H4z'/%3E%3Cpath fill='%23DDA466' d='M4 3h1v1H4zM4 4h1v1H4zM4 5h1v1H4zM4 6h1v1H4zM4 7h1v1H4zM4 8h1v1H4zM4 9h1v1H4zM4 10h1v1H4zM4 11h1v1H4z'/%3E%3Cpath fill='%23B8783A' d='M5 3h3v1H5zM5 4h4v1H5zM5 5h3v1H5zM5 6h4v1H5zM5 7h3v1H5zM5 8h5v1H5zM5 9h7v1H5zM5 10h9v1H5zM5 11h10v1H5z'/%3E%3Cpath fill='%23FFFFFF' d='M8 3h1v1H8zM8 5h1v1H8zM8 7h1v1H8zM10 8h1v1H10zM12 9h1v1H12z'/%3E%3Cpath fill='%235E6875' d='M4 12h11v1H4zM4 13h3v1H4z'/%3E%3C/svg%3E">
+<link rel="alternate" type="text/plain" href="llms.txt" title="llms.txt">
+<link rel="alternate" type="application/json" href="tools.json" title="tools.json">
 <style>
+/* Classic desktop-dialog look: a window with a title bar, a task pane, etched group boxes and a
+   status bar. System fonts only. Light theme only (the page sets color-scheme: light). */
 :root {
   color-scheme: light;
-  --bg: #E9EDF2;
-  --surface: #FFFFFF;
-  --ink: #18202B;
-  --muted: #5B6676;
-  --line: #CDD5DF;
-  --accent: #2449C9;
-  --accent-soft: #DCE4FB;
-  --on-accent: #FFFFFF;
-  --mark: #F2B53A;
-  --code-bg: #172340;
-  --code-ink: #DCE4F2;
-  --code-dim: #8796B5;
-  --code-hi: #F2B53A;
-  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-  --body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  box-sizing: border-box;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --desk: #3F6A96;
+  --face: #ECE9E0;
+  --face-2: #F5F3ED;
+  --well: #FFFFFF;
+  --edge-hi: #FFFFFF;
+  --edge-lo: #C2BEB1;
+  --edge-dk: #8C887C;
+  --ink: #1A1F29;
+  --muted: #50565F;
+  --faint: #8A877D;
+  --link: #0A4BBF;
+  --caption: #1B4A9C;
+  --field-edge: #7F9DB9;
+  --sel: #DCE7FA;
+  --menu-hi: #2F62C4;
+  --glow: #F2B53A;
+  --cb-edge: #1C5180;
+  --go-a: #2F7F26;
+  --go-b: #22661A;
+  --go-edge: #1A5214;
+  --con-bg: #10161D;
+  --con-ink: #D5DAE0;
+  --con-dim: #8D99A6;
+  --con-hi: #F0CF5A;
+  --ui: Tahoma, Verdana, "Segoe UI", "DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+  --mono: "Lucida Console", "DejaVu Sans Mono", Consolas, Menlo, ui-monospace, monospace;
+  --px-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 7' shape-rendering='crispEdges'%3E%3Cpath fill='%231E7F19' d='M6 0h1v2H6zM5 1h1v2H5zM4 2h1v2H4zM0 2h1v2H0zM1 3h1v2H1zM3 3h1v2H3zM2 4h1v2H2z'/%3E%3C/svg%3E");
+  --px-check-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 7' shape-rendering='crispEdges'%3E%3Cpath fill='%23898579' d='M6 0h1v2H6zM5 1h1v2H5zM4 2h1v2H4zM0 2h1v2H0zM1 3h1v2H1zM3 3h1v2H3zM2 4h1v2H2z'/%3E%3C/svg%3E");
+  --px-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 5' shape-rendering='crispEdges'%3E%3Cpath fill='%231E7F19' d='M1 0h3v1H1zM0 1h5v3H0zM1 4h3v1H1z'/%3E%3C/svg%3E");
+  --px-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 7' shape-rendering='crispEdges'%3E%3Cpath fill='%231B4A9C' d='M0 0h1v7H0zM1 1h1v5H1zM2 2h1v3H2zM3 3h1v1H3z'/%3E%3C/svg%3E");
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #151A22; --surface: #1D2430; --ink: #E6EBF2; --muted: #98A3B3;
-    --line: #2E3746; --accent: #7C9BFF; --accent-soft: #24304D; --on-accent: #10172A;
-    --mark: #F2B53A; --code-bg: #0F1A33; --code-ink: #DCE4F2; --code-dim: #7887A6; --code-hi: #F2B53A;
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #151A22; --surface: #1D2430; --ink: #E6EBF2; --muted: #98A3B3;
-  --line: #2E3746; --accent: #7C9BFF; --accent-soft: #24304D; --on-accent: #10172A;
-  --mark: #F2B53A; --code-bg: #0F1A33; --code-ink: #DCE4F2; --code-dim: #7887A6; --code-hi: #F2B53A;
-}
-*, *::before, *::after { box-sizing: inherit; }
-html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--desk); scroll-padding: 12px 0 48px; }
 body {
-  margin: 0; background: var(--bg); color: var(--ink);
-  font: 16px/1.5 var(--body);
-  -webkit-font-smoothing: antialiased;
+  margin: 0; background: var(--desk); color: var(--ink);
+  font: 13px/1.45 var(--ui);
+  padding: 24px clamp(0px, 3vw, 32px) 32px;
 }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+a { color: var(--link); }
+a:hover { color: #062F7A; }
+:focus-visible { outline: 2px dotted var(--ink); outline-offset: 1px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip { position: absolute; left: 8px; top: -60px; z-index: 10; background: var(--well); color: var(--ink); padding: 6px 10px; border: 1px solid var(--edge-dk); }
+.skip:focus { top: 8px; }
+code, kbd, pre { font-family: var(--mono); }
+svg.px { display: block; flex: none; image-rendering: pixelated; }
 
-.wrap { max-width: 1240px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
-
-header.top { padding: clamp(28px, 6vw, 56px) 0 clamp(20px, 3vw, 32px); }
-header.top h1 {
-  font-family: var(--display); font-weight: 800;
-  font-size: clamp(2.2rem, 6vw, 4rem); line-height: 0.95; letter-spacing: -0.03em;
-  margin: 0 0 14px; max-width: 14ch;
+/* ---------- window ---------- */
+.window {
+  max-width: 1200px; margin: 0 auto; background: var(--face);
+  border: 1px solid #12357A; border-radius: 7px 7px 3px 3px;
+  box-shadow: 0 10px 28px rgba(5, 18, 40, .45);
 }
-header.top p { margin: 0; color: var(--muted); font-size: 1.075rem; max-width: 58ch; }
-
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(20px, 3vw, 40px); align-items: start; padding-bottom: 64px; }
-@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-
-.stephead { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; }
-.stephead .n {
-  font-family: var(--display); font-weight: 800; font-size: 1.05rem;
-  width: 30px; height: 30px; border-radius: 50%; flex: none;
-  display: inline-grid; place-items: center; background: var(--ink); color: var(--bg);
-  transform: translateY(-2px);
+.titlebar {
+  display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 10px;
+  border-radius: 6px 6px 0 0; color: #FFFFFF;
+  background: linear-gradient(180deg, #4E8AEA 0%, #2C64D0 9%, #2159C4 50%, #1C4DAF 90%, #173F92 100%);
+  text-shadow: 1px 1px 0 #0D2C6B;
 }
-.stephead h2 { font-family: var(--display); font-weight: 700; font-size: 1.45rem; letter-spacing: -0.01em; margin: 0; }
-.stephead .aside { margin-left: auto; display: flex; gap: 6px; }
-
-section.step + section.step { margin-top: 36px; }
-
-/* Package manager picker */
-.pms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-@media (max-width: 520px) { .pms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.pm { position: relative; }
-.pm input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.pm label {
-  display: block; padding: 12px 14px 11px; border-radius: 10px;
-  background: var(--surface); border: 1.5px solid var(--line); cursor: pointer;
-  transition: border-color .12s, background .12s;
+.titlebar .tb-title { font-weight: bold; font-size: 13px; }
+.titlebar .tb-sub { opacity: .85; font-size: 12px; }
+.titlebar .tb-ver { margin-left: auto; font-size: 12px; opacity: .9; white-space: nowrap; }
+.menubar {
+  display: flex; flex-wrap: wrap; gap: 0 2px; padding: 2px 6px;
+  background: var(--face-2); border-bottom: 1px solid var(--edge-lo);
 }
-.pm .cmd { font-family: var(--display); font-weight: 700; font-size: 1.3rem; letter-spacing: -0.01em; display: block; line-height: 1.2; }
-.pm .distros { color: var(--muted); font-size: .82rem; display: block; line-height: 1.35; margin-top: 2px; }
-.pm .cmd small { font: 500 .78rem/1 var(--body); color: var(--muted); letter-spacing: 0; vertical-align: 2px; }
-.pm input:checked + label { border-color: var(--accent); background: var(--accent-soft); }
-.pm input:checked + label .cmd { color: var(--accent); }
-.pm input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+.menubar a { color: var(--ink); text-decoration: none; padding: 3px 8px; border-radius: 2px; }
+.menubar a:hover { background: var(--menu-hi); color: #FFFFFF; }
+.banner {
+  display: flex; align-items: center; gap: 16px; padding: 14px 20px 14px 20px;
+  background: var(--well); border-bottom: 1px solid var(--edge-lo); box-shadow: 0 1px 0 var(--edge-hi);
+}
+.banner .bt { flex: 1; min-width: 0; }
+.banner h1 { margin: 0 0 3px; font-size: 18px; line-height: 1.25; }
+.banner p { margin: 0; color: var(--muted); max-width: 72ch; }
+.banner .px { width: 64px; height: 64px; }
+.infobar { margin: 12px 16px 0; padding: 8px 12px; background: #FFFBE1; border: 1px solid #D9C66A; }
+.infobar p { margin: 0; }
 
-/* Tool filter */
-.filter { position: relative; margin: 0 0 16px; }
-.filter input {
-  width: 100%; font: 400 1rem/1.4 var(--body); color: var(--ink); background: var(--surface);
-  border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 44px 10px 38px;
+.wbody { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: start; }
+
+/* ---------- task pane ---------- */
+.pane {
+  align-self: stretch; padding: 12px 12px 16px;
+  background: linear-gradient(180deg, #C3D3EF 0%, #A9BFE6 100%);
+  border-right: 1px solid #93A9D3;
+}
+.pane-in { position: sticky; top: 12px; max-height: calc(100vh - 48px); overflow: auto; }
+.pbox { margin: 0 0 12px; border-radius: 4px 4px 0 0; }
+.pbox h2 {
+  margin: 0; padding: 5px 10px; font-size: 12px; font-weight: bold; color: var(--caption);
+  border-radius: 4px 4px 0 0; background: linear-gradient(90deg, #FFFFFF 0%, #CCDAF4 100%);
+}
+.pbox .pb { padding: 8px 10px 10px; background: #EEF3FB; border: 1px solid #FFFFFF; border-top: 0; }
+.pms { display: grid; gap: 1px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.pm { display: grid; grid-template-columns: 13px minmax(0, 1fr); column-gap: 7px; align-items: center; align-content: start; padding: 3px 4px; border-radius: 2px; cursor: pointer; }
+.pm:hover { background: var(--sel); }
+.pm .pmname { font-weight: bold; }
+.pm .pmname small { font-weight: normal; color: var(--muted); font-size: 11px; }
+.pm .pmd { grid-column: 2; color: var(--muted); font-size: 11px; line-height: 1.3; }
+.pcount { margin: 0 0 6px; }
+.tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.task {
+  font: inherit; color: var(--link); background: none; border: 0; padding: 1px 0 1px 13px; cursor: pointer; text-align: left;
+  background: var(--px-arrow) no-repeat 2px 50% / 4px 7px; text-decoration: none;
+}
+.task:hover { text-decoration: underline; }
+.mini {
+  display: block; margin: 0 0 8px; padding: 4px 6px; font-size: 11px; line-height: 1.4; color: var(--ink);
+  background: var(--well); border: 1px solid var(--field-edge); overflow-wrap: anywhere; word-break: break-all;
+}
+.mini.none { color: var(--muted); font-family: var(--ui); word-break: normal; }
+.pbox .btn.go { width: 100%; margin-bottom: 6px; }
+
+/* ---------- controls ---------- */
+.btn {
+  font: inherit; color: var(--ink); cursor: pointer; white-space: nowrap;
+  padding: 4px 12px; min-height: 25px; border: 1px solid #7C786C; border-radius: 3px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F1EFE8 60%, #DEDACF 100%);
+}
+.btn:hover { box-shadow: inset 0 -2px 0 var(--glow), inset 0 1px 0 #FCE7A8; }
+.btn:active { background: linear-gradient(180deg, #DAD6CB 0%, #EAE7DF 100%); box-shadow: inset 1px 1px 2px rgba(0,0,0,.18); }
+.btn:disabled { color: var(--faint); border-color: #B5B1A6; cursor: not-allowed; box-shadow: none; background: #F2F0EA; }
+.btn.go {
+  color: #FFFFFF; font-weight: bold; border-color: var(--go-edge); text-shadow: 0 1px 0 #164A10;
+  background: linear-gradient(180deg, #45993A 0%, var(--go-a) 35%, var(--go-b) 100%);
+}
+.btn.go:hover { box-shadow: inset 0 -2px 0 #8FE07E, inset 0 1px 0 #9BE28C; }
+.btn.go:active { background: linear-gradient(180deg, var(--go-b) 0%, var(--go-a) 100%); }
+.btn.go:disabled { color: #F4F4F0; text-shadow: none; border-color: #9DA79A; background: #AEB8AB; }
+
+input[type="checkbox"], input[type="radio"] {
+  -webkit-appearance: none; appearance: none; margin: 0; flex: none;
+  width: 13px; height: 13px; border: 1px solid var(--cb-edge); cursor: pointer;
+  background: linear-gradient(135deg, #DCDBD5 0%, #FFFFFF 85%);
+}
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:checked { background: var(--px-check) no-repeat 50% 50% / 7px 7px, linear-gradient(135deg, #DCDBD5 0%, #FFFFFF 85%); }
+input[type="radio"]:checked { background: var(--px-dot) no-repeat 50% 50% / 5px 5px, linear-gradient(135deg, #DCDBD5 0%, #FFFFFF 85%); }
+input[type="checkbox"]:hover:not([aria-disabled="true"]), input[type="radio"]:hover { box-shadow: inset 0 0 0 1px var(--glow); }
+input[aria-disabled="true"] { border-color: #A9A598; background: #F1EFE9; cursor: not-allowed; }
+input[aria-disabled="true"]:checked { background: var(--px-check-off) no-repeat 50% 50% / 7px 7px, #F1EFE9; }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px dotted var(--ink); outline-offset: 2px; }
+
+/* ---------- tools, script and agent sections ---------- */
+.content { padding: 14px 18px 20px; min-width: 0; }
+.sect + .sect { margin-top: 22px; }
+.sect > h2, .pickhead h2 { margin: 0; font-size: 15px; color: var(--caption); }
+.sect > h2 { margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--edge-lo); box-shadow: 0 1px 0 var(--edge-hi); }
+.pickhead { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--edge-lo); box-shadow: 0 1px 0 var(--edge-hi); }
+.find { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.find label { font-weight: normal; }
+.field { position: relative; display: flex; }
+.field input {
+  width: 230px; font: inherit; color: var(--ink); background: var(--well);
+  border: 1px solid var(--field-edge); border-radius: 0; padding: 3px 24px 3px 6px; min-height: 24px;
   -webkit-appearance: none; appearance: none;
 }
-.filter input::placeholder { color: var(--muted); opacity: 1; }
-.filter input:focus { border-color: var(--accent); }
-.filter .icon { position: absolute; left: 13px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.filter kbd {
-  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none;
-  font: 500 .78rem/1 var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px;
+.field input::placeholder { color: #6B6F75; opacity: 1; }
+.field input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.field input:focus { outline: 2px dotted var(--ink); outline-offset: 1px; }
+.qclear {
+  position: absolute; right: 1px; top: 1px; bottom: 1px; width: 22px; border: 0; background: none; cursor: pointer;
+  display: grid; place-items: center; color: var(--muted); padding: 0;
 }
-.filter input:focus ~ kbd, .filter input:not(:placeholder-shown) ~ kbd { display: none; }
-@media (hover: none) { .filter kbd { display: none; } }
-.qstatus { margin: -8px 0 14px; color: var(--muted); font-size: .88rem; }
+.qclear:hover { background: var(--sel); }
+.qclear[hidden] { display: none; }
+.find kbd { font-size: 11px; color: var(--muted); border: 1px solid var(--edge-dk); border-bottom-width: 2px; border-radius: 2px; padding: 0 5px; background: var(--well); }
+@media (hover: none) { .find kbd { display: none; } }
+.qline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 4px 0 6px; min-height: 0; }
+.qstatus { margin: 0; color: var(--muted); }
 .qstatus:empty { display: none; }
+.qline .btn[hidden] { display: none; }
 
-/* Tools */
-.group { margin-top: 18px; }
-.group:first-of-type { margin-top: 0; }
+.groups { columns: 272px; column-gap: 14px; margin-top: 10px; }
+.group {
+  break-inside: avoid; display: block; margin: 0 0 12px; padding: 2px 6px 6px; min-width: 0;
+  border: 1px solid var(--edge-lo); border-radius: 3px; box-shadow: inset 1px 1px 0 var(--edge-hi), 1px 1px 0 var(--edge-hi);
+}
 .group[hidden], .tool[hidden] { display: none; }
-.group h3 { font-size: .95rem; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
-.group h3 .gcount { font-weight: 500; font-size: .82rem; color: var(--accent); margin-left: 4px; }
-.tools { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.tool { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 10px 14px; cursor: pointer; position: relative; }
-.tool:not([hidden]) ~ .tool:not([hidden]) { border-top: 1px solid var(--line); }
-.tool:hover { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
-.tool input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.box {
-  grid-row: span 2; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--muted);
-  display: grid; place-items: center; transition: background .1s, border-color .1s;
+.group legend { display: flex; align-items: center; gap: 6px; padding: 0 4px; margin-left: 2px; color: var(--caption); font-weight: bold; }
+.group legend .px { width: 32px; height: 32px; }
+.gcount { font-weight: normal; font-size: 11px; color: var(--ink); background: #FFF4C9; border: 1px solid #DCC26A; border-radius: 2px; padding: 0 4px; }
+.gcount:empty { display: none; }
+.tool {
+  display: grid; grid-template-columns: 13px minmax(0, 1fr) auto; column-gap: 7px; align-items: center;
+  padding: 3px 4px; border-radius: 2px; cursor: pointer;
 }
-.box svg { width: 14px; height: 14px; opacity: 0; transform: scale(.6); transition: opacity .1s, transform .12s; }
-.tool input:checked ~ .box { background: var(--accent); border-color: var(--accent); }
-.tool input:checked ~ .box svg { opacity: 1; transform: none; }
-.tool input:focus-visible ~ .box { outline: 2px solid var(--accent); outline-offset: 2px; }
-.tool.locked { cursor: default; }
-.tool.locked input ~ .box { background: var(--accent-soft); border-color: var(--accent); border-style: dashed; }
-.tool.locked input ~ .box svg { opacity: 1; transform: none; color: var(--accent); }
-.tool .name { font-weight: 600; }
-.tool .desc { color: var(--muted); font-size: .9rem; grid-column: 2; line-height: 1.4; }
-.tool .desc em { font-style: normal; color: var(--accent); font-weight: 500; }
-.tool .why { display: block; font-size: .82rem; margin-top: 1px; }
-.tool.skipped { cursor: not-allowed; }
-.tool.skipped.picked { cursor: pointer; }
-.tool.skipped:hover { background: none; }
-.tool.skipped .name { color: var(--muted); }
-.tool.skipped .box { border-style: dashed; }
-.tool.skipped input:checked ~ .box { background: var(--muted); border-color: var(--muted); }
-.tool.skipped .via { border-style: dashed; }
-.via {
-  grid-row: span 2; font-size: .78rem; font-weight: 500; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+.tool:hover { background: var(--sel); }
+.tool:has(input:focus-visible) { background: var(--sel); }
+.tool .name { min-width: 0; overflow-wrap: anywhere; }
+.tool .via {
+  font-size: 11px; line-height: 15px; color: var(--muted); white-space: nowrap;
+  border: 1px solid var(--edge-lo); background: var(--face-2); border-radius: 2px; padding: 0 4px;
 }
-.via.native { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.tool .via.native { color: var(--caption); border-color: #A9C0E6; background: #EAF1FC; }
+.tool .via.fn { color: #5A4A12; border-color: #D9C78C; background: #FBF5DF; }
+.tool .desc { grid-column: 2 / 4; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.tool .desc em { font-style: normal; color: var(--caption); }
+.tool .why { display: block; color: #7A3B10; }
+.tool.locked, .tool.off { cursor: default; }
+.tool.skipped .name { color: var(--faint); }
+.tool.skipped .via { border-style: dashed; color: var(--faint); background: transparent; }
+.tool.off:hover { background: none; }
 
-.btn {
-  font: 500 .875rem/1 var(--body); color: var(--ink); background: var(--surface);
-  border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; cursor: pointer;
+/* ---------- script ---------- */
+.cmds { display: grid; gap: 10px; }
+.cmd .cl { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 0 0 3px; }
+.cmd .cl b { font-weight: bold; }
+.cmd .cl small { color: var(--muted); font-size: 12px; }
+.cmd .cr { display: flex; align-items: stretch; gap: 6px; }
+.cmd code {
+  flex: 1; min-width: 0; display: block; padding: 5px 7px; font-size: 12px; line-height: 1.5; color: var(--ink);
+  background: var(--well); border: 1px solid var(--field-edge); overflow-wrap: anywhere; word-break: break-all;
+  max-height: 7.8em; overflow: auto;
 }
-.btn:hover { border-color: var(--muted); }
+.cmd code.none { color: var(--muted); font-family: var(--ui); word-break: normal; }
+.cmd.primary code { font-size: 13px; padding: 7px 8px; }
+.cmd .btn { align-self: flex-start; min-width: 74px; }
+.cmd.primary .btn { min-width: 132px; min-height: 31px; }
+.opt { display: grid; grid-template-columns: 13px minmax(0, 1fr); column-gap: 7px; margin: 14px 0 0; cursor: pointer; }
+.opt input { margin-top: 2px; }
+.opt small { display: block; color: var(--muted); font-size: 12px; }
+.combo { margin: 10px 0 0; color: var(--muted); }
+.combo code { color: var(--ink); background: var(--well); border: 1px solid var(--edge-lo); padding: 0 4px; overflow-wrap: anywhere; }
 
-.opt { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; color: var(--ink); font-size: .95rem; cursor: pointer; }
-.opt input { margin: 4px 0 0; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
-.opt span small { display: block; color: var(--muted); font-size: .85rem; }
-
-/* Script panel */
-.panel { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
-@media (max-width: 900px) { .panel { position: static; } }
-.term { background: var(--code-bg); color: var(--code-ink); border-radius: 14px; overflow: hidden; }
-.termbar { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; flex-wrap: wrap; }
-.termbar .title { font-family: var(--display); font-weight: 700; font-size: 1.05rem; margin-right: auto; }
-.seg { display: inline-flex; background: rgba(255,255,255,.07); border-radius: 8px; padding: 3px; }
+.console { margin-top: 14px; border: 1px solid #2B3440; border-radius: 3px; background: var(--con-bg); color: var(--con-ink); }
+.conbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 6px 5px 10px;
+  background: linear-gradient(180deg, #F4F2EC 0%, #DCD8CC 100%); color: var(--ink); border-bottom: 1px solid #2B3440;
+  border-radius: 2px 2px 0 0;
+}
+.conbar .ct { font-weight: bold; margin-right: auto; }
+.seg { display: inline-flex; }
 .seg button {
-  font: 500 .8rem/1 var(--body); color: var(--code-dim); background: none; border: 0;
-  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  font: inherit; color: var(--ink); cursor: pointer; padding: 3px 10px; min-height: 25px;
+  border: 1px solid #7C786C; background: linear-gradient(180deg, #FFFFFF 0%, #E6E3DA 100%);
 }
-.seg button[aria-pressed="true"] { background: rgba(255,255,255,.12); color: var(--code-ink); }
-.copy {
-  font: 600 .875rem/1 var(--body); background: var(--mark); color: #1E1606; border: 0;
-  border-radius: 8px; padding: 9px 14px; cursor: pointer; min-width: 112px;
-}
-.copy:disabled { opacity: .45; cursor: not-allowed; }
-.hint { margin: 0; padding: 0 16px 10px; color: var(--code-dim); font-size: .85rem; }
-.hint code { font-family: var(--mono); color: var(--code-ink); font-size: .82rem; }
+.seg button + button { border-left: 0; }
+.seg button:first-child { border-radius: 3px 0 0 3px; }
+.seg button:last-child { border-radius: 0 3px 3px 0; }
+.seg button:hover { box-shadow: inset 0 -2px 0 var(--glow); }
+.seg button[aria-pressed="true"] { background: #D3CFC3; box-shadow: inset 1px 1px 2px rgba(0,0,0,.25); font-weight: bold; }
+.hint { margin: 0; padding: 7px 10px 0; color: var(--con-dim); font-size: 12px; }
+.hint:empty { display: none; }
+.hint code { color: var(--con-ink); }
 pre.code {
-  margin: 0; padding: 14px 16px 18px; max-height: min(62vh, 640px); overflow: auto;
-  font: 12.5px/1.6 var(--mono); tab-size: 2; border-top: 1px solid rgba(255,255,255,.08);
+  margin: 0; padding: 8px 10px 12px; max-height: min(60vh, 600px); overflow: auto;
+  font-size: 12px; line-height: 1.5; tab-size: 2; color: var(--con-ink);
 }
-pre.code .c { color: var(--code-dim); }
-pre.code .h { color: var(--code-hi); }
-.empty { padding: 44px 20px 48px; text-align: center; color: var(--code-dim); border-top: 1px solid rgba(255,255,255,.08); }
-.empty strong { display: block; color: var(--code-ink); font-family: var(--display); font-size: 1.2rem; font-weight: 700; margin-bottom: 4px; }
+pre.code .c { color: var(--con-dim); }
+pre.code .h { color: var(--con-hi); }
+.empty { display: flex; gap: 12px; align-items: center; padding: 22px 16px 24px; color: var(--con-dim); }
+.empty strong { display: block; color: var(--con-ink); font-size: 14px; }
+.summary { margin: 8px 0 0; color: var(--muted); }
+.summary:empty { display: none; }
 
-.meta { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
-.summary { color: var(--muted); font-size: .92rem; margin: 0; }
-.combo { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-.combo .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.combo .k { font-weight: 600; font-size: .92rem; }
-.combo .id { font-family: var(--mono); font-size: .9rem; color: var(--accent); word-break: break-all; }
-.combo p { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
-.combo .future { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
-.combo .soon { color: var(--muted); font-size: .85rem; }
-.combo .future code { font-family: var(--mono); font-size: .82rem; color: var(--muted); display: block; overflow-x: auto; white-space: nowrap; padding: 2px 0; }
+/* ---------- static agent section ---------- */
+.agents { background: var(--face-2); border: 1px solid var(--edge-lo); box-shadow: inset 1px 1px 0 var(--edge-hi); padding: 10px 14px 12px; }
+.agents > h2 { border: 0; box-shadow: none; padding: 0; }
+.agents h3 { font-size: 13px; margin: 12px 0 4px; }
+.agents p, .agents ul { margin: 0 0 6px; max-width: 86ch; }
+.agents ul { padding-left: 18px; }
+.agents li { margin: 2px 0; }
+.agents code { font-size: 12px; overflow-wrap: anywhere; }
+.agents pre { margin: 4px 0 6px; padding: 8px 10px; font-size: 12px; line-height: 1.5; background: var(--well); border: 1px solid var(--field-edge); white-space: pre-wrap; overflow-wrap: anywhere; }
+.agents pre .c { color: var(--muted); }
 
-footer { color: var(--muted); font-size: .85rem; padding: 0 0 40px; max-width: 70ch; }
-footer p { margin: 0 0 6px; }
-footer a { color: inherit; }
+/* ---------- footer + status bar ---------- */
+.foot { padding: 12px 18px 14px; border-top: 1px solid var(--edge-lo); box-shadow: inset 0 1px 0 var(--edge-hi); color: var(--muted); }
+.foot p { margin: 0 0 6px; max-width: 100ch; }
+.foot .links { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.statusbar {
+  position: sticky; bottom: 0; z-index: 2; display: flex; gap: 3px; padding: 3px; font-size: 12px;
+  background: var(--face); border-top: 1px solid var(--edge-dk); border-radius: 0 0 3px 3px;
+}
+.sb { padding: 1px 8px; border: 1px solid; border-color: var(--edge-lo) var(--edge-hi) var(--edge-hi) var(--edge-lo); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-sum { flex: 1; min-width: 0; }
+.sb-combo { font-family: var(--mono); font-size: 11px; line-height: 17px; max-width: 34%; }
+.sb a { text-decoration: none; }
+.sb a:hover { text-decoration: underline; }
 
+/* ---------- narrow screens ---------- */
+@media (max-width: 1000px) { .wbody { grid-template-columns: 210px minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  body { padding: 0; font-size: 15px; }
+  .window { border: 0; border-radius: 0; box-shadow: none; }
+  .titlebar { border-radius: 0; padding: 6px 16px; }
+  .titlebar .tb-sub { display: none; }
+  .menubar { padding: 2px 10px; }
+  .banner { padding: 14px 16px; align-items: flex-start; }
+  .banner h1 { font-size: 19px; }
+  .banner .px { width: 48px; height: 48px; }
+  .infobar { margin: 12px 16px 0; }
+  .wbody { grid-template-columns: minmax(0, 1fr); }
+  .pane { padding: 14px 16px 4px; border-right: 0; border-bottom: 1px solid #93A9D3; }
+  .pane-in { position: static; max-height: none; overflow: visible; }
+  .pbox h2 { font-size: 14px; }
+  .pms { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 6px; }
+  .pm { padding: 5px 4px; }
+  .pm .pmd { font-size: 12px; }
+  .pbox-run { display: none; }
+  .tasks { grid-template-columns: repeat(2, max-content); gap: 4px 18px; }
+  .task { padding-top: 6px; padding-bottom: 6px; }
+  .content { padding: 14px 16px 18px; }
+  .gcount { font-size: 12px; }
+  .pickhead { align-items: stretch; flex-direction: column; }
+  .find { margin-left: 0; }
+  .field { flex: 1; }
+  .field input { width: 100%; font-size: 16px; min-height: 36px; }
+  .qclear { width: 36px; }
+  .groups { columns: auto; }
+  .group legend { font-size: 15px; }
+  .tool { padding: 6px 4px; column-gap: 9px; }
+  .tool .desc { font-size: 13px; }
+  .tool .via { font-size: 12px; }
+  .cmd .cr { flex-direction: column; }
+  .cmd .btn, .cmd.primary .btn { align-self: stretch; min-height: 40px; }
+  .cmd code, .cmd .cl small, .opt small, .tool .desc { font-size: 13px; }
+  .conbar { padding: 6px 8px; }
+  .seg button, .conbar .btn { min-height: 36px; }
+  pre.code { max-height: 70vh; }
+  .agents { padding: 10px 12px 12px; }
+  .foot { padding: 12px 16px 14px; }
+  .statusbar { font-size: 13px; border-radius: 0; }
+  .sb-combo { display: none; }
+  .btn, .seg button { min-height: 32px; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <h1>Boots on the ground</h1>
-    <p>Fresh Linux box? Pick your package manager, tick the tools you want, and paste one script. It installs what your distro packages natively and fetches the rest from upstream.</p>
+<a class="skip" href="#pick">Skip to the tool list</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <!-- Pixel boot, 16x16; the same grid style as the group icons in the UI script:
+       ...kkkkkkk......  ...knnnnnk......  ...khNNNwk......  ...khNNNNk......
+       ...khNNNwk......  ...khNNNNk......  ...khNNNwkk.....  ...khNNNNNwkk...
+       ...khNNNNNNNwk..  ...khNNNNNNNNNk.  ...khNNNNNNNNNNk  ...kDDDDDDDDDDDk
+       ...kDDDkkkkkkkk.  ...kkkkk........ -->
+  <symbol id="px-boot" viewBox="0 0 16 16"><path fill="#1B2433" d="M3 1h7v1H3zM3 2h1v1H3zM9 2h1v1H9zM3 3h1v1H3zM9 3h1v1H9zM3 4h1v1H3zM9 4h1v1H9zM3 5h1v1H3zM9 5h1v1H9zM3 6h1v1H3zM9 6h1v1H9zM3 7h1v1H3zM9 7h2v1H9zM3 8h1v1H3zM11 8h2v1H11zM3 9h1v1H3zM13 9h1v1H13zM3 10h1v1H3zM14 10h1v1H14zM3 11h1v1H3zM15 11h1v1H15zM3 12h1v1H3zM15 12h1v1H15zM3 13h1v1H3zM7 13h8v1H7zM3 14h5v1H3z"/><path fill="#6E4320" d="M4 2h5v1H4z"/><path fill="#DDA466" d="M4 3h1v1H4zM4 4h1v1H4zM4 5h1v1H4zM4 6h1v1H4zM4 7h1v1H4zM4 8h1v1H4zM4 9h1v1H4zM4 10h1v1H4zM4 11h1v1H4z"/><path fill="#B8783A" d="M5 3h3v1H5zM5 4h4v1H5zM5 5h3v1H5zM5 6h4v1H5zM5 7h3v1H5zM5 8h5v1H5zM5 9h7v1H5zM5 10h9v1H5zM5 11h10v1H5z"/><path fill="#FFFFFF" d="M8 3h1v1H8zM8 5h1v1H8zM8 7h1v1H8zM10 8h1v1H10zM12 9h1v1H12z"/><path fill="#5E6875" d="M4 12h11v1H4zM4 13h3v1H4z"/></symbol>
+</svg>
+<div class="window" id="top">
+  <header>
+    <div class="titlebar">
+      <svg class="px" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true"><use href="#px-boot"/></svg>
+      <span class="tb-title">Boots on the ground</span>
+      <span class="tb-sub">dev-tools-installer</span>
+      <span class="tb-ver" data-ver>__APP_VERSION__</span>
+    </div>
+    <nav class="menubar" aria-label="Project links">
+      <a href="https://github.com/Magnus167/dev-tools-installer">Source on GitHub</a>
+      <a href="https://github.com/Magnus167/dev-tools-installer/releases/tag/__APP_VERSION__" data-relnotes>Release notes</a>
+      <a href="#agents">For AI assistants</a>
+      <a href="llms.txt">llms.txt</a>
+    </nav>
+    <div class="banner">
+      <div class="bt">
+        <h1>Boots on the ground</h1>
+        <p>Set up a fresh Linux box with one command. Pick your package manager, tick the tools you want, then copy the command or read the script first. It uses your distro’s packages where they exist and each project’s official releases for the rest.</p>
+      </div>
+      <svg class="px" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><use href="#px-boot"/></svg>
+    </div>
   </header>
+  <noscript><div class="infobar"><p><b>JavaScript is off,</b> so this page can’t build a script here. You can still use the installer from a terminal: see <a href="#agents">For AI assistants and scripts</a> below, or read <a href="llms.txt">llms.txt</a> and <a href="tools.json">tools.json</a>.</p></div></noscript>
 
-  <div class="layout">
-    <main>
-      <section class="step" aria-labelledby="s1">
-        <div class="stephead"><span class="n" aria-hidden="true">1</span><h2 id="s1">Your system</h2></div>
-        <div class="pms" id="pms" role="radiogroup" aria-labelledby="s1"></div>
-      </section>
+  <main class="wbody">
+    <div class="pane">
+      <div class="pane-in">
+        <section class="pbox" aria-labelledby="h-sys">
+          <h2 id="h-sys">System</h2>
+          <div class="pb">
+            <div class="pms" id="pms" role="radiogroup" aria-labelledby="h-sys"></div>
+          </div>
+        </section>
+        <section class="pbox" aria-labelledby="h-tools">
+          <h2 id="h-tools">Tools</h2>
+          <div class="pb">
+            <p class="pcount" id="pcount">No tools picked yet.</p>
+            <ul class="tasks">
+              <li><button class="task" id="all" type="button">Select all</button></li>
+              <li><button class="task" id="none" type="button">Clear</button></li>
+            </ul>
+          </div>
+        </section>
+        <section class="pbox pbox-run" aria-labelledby="h-run">
+          <h2 id="h-run">Your script</h2>
+          <div class="pb">
+            <code class="mini none" id="pcmd">Tick a tool to get your command.</code>
+            <button class="btn go" type="button" data-copy="cmd" data-select="#oneliner" disabled>Copy command</button>
+            <ul class="tasks">
+              <li><a class="task" href="#script">Read the script</a></li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
 
-      <section class="step" aria-labelledby="s2">
-        <div class="stephead">
-          <span class="n" aria-hidden="true">2</span><h2 id="s2">Your tools</h2>
-          <div class="aside"><button class="btn" id="all" type="button">Select all</button><button class="btn" id="none" type="button">Clear</button></div>
-        </div>
-        <div class="filter">
-          <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.5 10.5L14 14"/></svg>
-          <input type="search" id="q" placeholder="Filter tools" aria-label="Filter tools" aria-describedby="qhelp" autocomplete="off" spellcheck="false" enterkeyhint="search">
-          <kbd aria-hidden="true">/</kbd>
+    <div class="content">
+      <section class="sect" id="pick" aria-labelledby="h-pick" tabindex="-1">
+        <div class="pickhead">
+          <h2 id="h-pick">Pick your tools</h2>
+          <div class="find">
+            <label for="q">Find:</label>
+            <span class="field">
+              <input type="search" id="q" placeholder="e.g. json, kubernetes, docker" aria-describedby="qhelp" autocomplete="off" spellcheck="false" enterkeyhint="search">
+              <button class="qclear" id="qclear" type="button" aria-label="Clear the filter" hidden><svg width="7" height="5" viewBox="0 0 7 5" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M0 0h2v1H0zM5 0h2v1H5zM1 1h2v1H1zM4 1h2v1H4zM2 2h3v1H2zM1 3h2v1H1zM4 3h2v1H4zM0 4h2v1H0zM5 4h2v1H5z"/></svg></button>
+            </span>
+            <kbd aria-hidden="true">/</kbd>
+          </div>
         </div>
         <p class="sr-only" id="qhelp">Matches tool names, descriptions and groups. Press slash to jump here, Escape to clear.</p>
-        <p class="qstatus" id="qstatus" role="status" aria-live="polite"></p>
-        <div id="groups"></div>
+        <div class="qline">
+          <p class="qstatus" id="qstatus" role="status" aria-live="polite"></p>
+          <button class="btn" id="qreset" type="button" hidden>Clear the filter</button>
+        </div>
+        <div class="groups" id="groups"></div>
+      </section>
+
+      <section class="sect" id="script" aria-labelledby="h-script">
+        <h2 id="h-script">Install command and script</h2>
+        <div class="cmds">
+          <div class="cmd primary">
+            <p class="cl" id="l-cmd"><b>Install command</b><small>Run it on the new box. It downloads this version’s installer and installs your picks.</small></p>
+            <div class="cr">
+              <code id="oneliner" class="none">Tick at least one tool to get a command.</code>
+              <button class="btn go" type="button" data-copy="cmd" data-select="#oneliner" aria-describedby="l-cmd" disabled>Copy command</button>
+            </div>
+          </div>
+          <div class="cmd">
+            <p class="cl" id="l-names"><b>Same picks, by name</b><small>Easier to read or edit: package manager, then tool ids.</small></p>
+            <div class="cr">
+              <code id="readable" class="none">Tick at least one tool to get a command.</code>
+              <button class="btn" type="button" data-copy="readable" data-select="#readable" aria-label="Copy the command with tool names" disabled>Copy</button>
+            </div>
+          </div>
+          <div class="cmd">
+            <p class="cl" id="l-print"><b>View the script first</b><small>Prints the exact script it would run, and runs nothing.</small></p>
+            <div class="cr">
+              <code id="printcmd" class="none">Tick at least one tool to get a command.</code>
+              <button class="btn" type="button" data-copy="print" data-select="#printcmd" aria-label="Copy the view-first command" disabled>Copy</button>
+            </div>
+          </div>
+        </div>
         <label class="opt"><input type="checkbox" id="rcopt" checked>
           <span>Wire up my shell<small>Adds PATH and the shell hooks for <span id="hooks">zoxide, fzf, starship, direnv, atuin and mise</span> (the ones you pick) to your .bashrc or .zshrc. Shell functions like clipcat, and the nvm and SDKMAN setup that node and java need, are always added there.</small></span>
         </label>
-      </section>
-    </main>
+        <p class="combo">Combo ID <code id="comboid"></code>: the same picks always give the same ID, and this page’s link keeps it, so you can bookmark or share your set.</p>
 
-    <aside class="panel" aria-labelledby="s3">
-      <div class="stephead"><span class="n" aria-hidden="true">3</span><h2 id="s3">Your script</h2></div>
-      <div class="term">
-        <div class="termbar">
-          <span class="title" id="termtitle">install.sh</span>
-          <div class="seg" role="group" aria-label="Script format">
-            <button type="button" data-mode="paste" aria-pressed="true">Paste into terminal</button>
-            <button type="button" data-mode="file" aria-pressed="false">install.sh</button>
+        <div class="console">
+          <div class="conbar">
+            <span class="ct" id="termtitle">Terminal</span>
+            <div class="seg" role="group" aria-label="Script format">
+              <button type="button" data-mode="paste" aria-pressed="true">Paste into terminal</button>
+              <button type="button" data-mode="file" aria-pressed="false">install.sh</button>
+            </div>
+            <button class="btn" id="copy" type="button" data-copy="script" data-select="#out pre" disabled>Copy script</button>
           </div>
-          <button class="copy" id="copy" type="button">Copy script</button>
+          <p class="hint" id="hint"></p>
+          <div id="out"></div>
         </div>
-        <p class="hint" id="hint"></p>
-        <div id="out"></div>
-      </div>
-      <div class="meta">
         <p class="summary" id="summary"></p>
-        <div class="combo">
-          <div class="row"><span class="k">Combo ID</span><span class="id" id="comboid"></span></div>
-          <p>The same picks always give the same ID, and this page’s link keeps it, so you can bookmark or share your set.</p>
-          <div class="future">
-            <div class="row"><span class="k">One-liner</span><span class="soon">coming in v1.1.0 — not live yet</span></div>
-            <code id="oneliner"></code>
-          </div>
-        </div>
-      </div>
-    </aside>
-  </div>
+      </section>
 
-  <footer>
+      <section class="sect agents" id="agents" aria-labelledby="h-agents">
+        <h2 id="h-agents">For AI assistants and scripts</h2>
+        <p>This page generates a bash script that installs common Linux developer tools (git, docker, ripgrep, node, kubectl and about 90 more) with apt, dnf, apk, pacman, zypper or yum. Everything runs in the browser; there is no server. The same generator is published next to this page as <a href="install.sh">install.sh</a>, so anything the page does also works from a terminal.</p>
+        <h3>Files next to this page</h3>
+        <ul>
+          <li><a href="llms.txt">llms.txt</a>: how to read this site and answer install requests, in plain text.</li>
+          <li><a href="tools.json">tools.json</a>: every tool id, its group, and how each package manager installs it, plus the combo-ID bit layout.</li>
+          <li><a href="install.sh">install.sh</a>: the installer. <code>--print</code> shows the script it would run, <code>--list</code> lists the tools, <code>--help</code> shows usage.</li>
+          <li><a href="SHA256SUMS">SHA256SUMS</a>: checksums of index.html, install.sh, tools.json and llms.txt for this version.</li>
+          <li>Source: <a href="https://github.com/Magnus167/dev-tools-installer">github.com/Magnus167/dev-tools-installer</a>, release <a href="https://github.com/Magnus167/dev-tools-installer/releases/tag/__APP_VERSION__" data-relnotes data-ver>__APP_VERSION__</a>, commit <code class="commit" id="commit">__APP_COMMIT__</code>.</li>
+        </ul>
+        <h3>From a link to a command</h3>
+        <p>A link to this page ends in a combo ID after the <code>#</code>: the package manager, a dash, and the picked tools as a base-36 bitmask (tools.json documents the bits). Pass the combo ID to install.sh from the same version directory. For example, the link <code><span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>#apt-2gosa7pa2h6</code> (git, docker and node on Debian or Ubuntu) is the same as:</p>
+        <pre>curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- apt-2gosa7pa2h6</pre>
+        <h3>Examples</h3>
+        <pre><span class="c"># print the script for a combo ID and run nothing</span>
+curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- --print apt-2gosa7pa2h6
+<span class="c"># install by package manager and tool ids; add --no-shell to leave .bashrc and .zshrc alone</span>
+curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- apt git docker node
+<span class="c"># Alpine has no bash until the installer adds it, so pipe to sh</span>
+curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | sh -s -- apk git jq
+<span class="c"># list tool ids and how one package manager installs each</span>
+curl -fsSL <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh | bash -s -- --list apt
+<span class="c"># check a download against this version's checksums</span>
+curl -fsSL -O <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>install.sh -O <span class="here">https://magnus167.github.io/dev-tools-installer/__APP_VERSION__/</span>SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS</pre>
+        <h3>Read before you run</h3>
+        <p>The script installs system packages with sudo (or doas) and puts upstream tools under your home directory, mostly in ~/.local/bin; Go goes to /usr/local/go. Before running it for someone, show them the script (<code>--print</code>, or this page with their link) and say what it will install. Versioned URLs (…/vX.Y.Z/) are built from that release’s git tag, so a pinned link keeps giving the same script.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
     <p>Read any script before you run it. System packages are installed with sudo (or doas); tools fetched from upstream go under your home directory (mostly ~/.local/bin; nvm, SDKMAN and rustup keep their own folders), except Go in /usr/local/go. Each step skips anything already on your PATH, so running it twice is safe.</p>
-    <p class="ver" id="ver">dev-tools-installer dev build</p>
+    <p class="links">
+      <a href="https://github.com/Magnus167/dev-tools-installer">Source on GitHub</a>
+      <a href="https://github.com/Magnus167/dev-tools-installer/issues">Report a problem</a>
+      <a href="https://github.com/Magnus167/dev-tools-installer/releases/tag/__APP_VERSION__" data-relnotes>Release notes</a>
+      <a href="https://github.com/Magnus167/dev-tools-installer/blob/main/LICENSE">BSD 3-Clause license</a>
+      <a href="#top">Back to top</a>
+    </p>
+    <p class="ver" id="ver">dev-tools-installer __APP_VERSION__</p>
   </footer>
+  <div class="statusbar">
+    <span class="sb sb-sum" id="sbsum">No tools picked yet.</span>
+    <span class="sb sb-combo" id="sbcombo" title="Combo ID"></span>
+    <span class="sb"><a href="#script">Script</a></span>
+  </div>
 </div>
 
 <!-- ===================== bash snippets (raw text, no escaping) ===================== -->
@@ -1811,34 +2061,149 @@ fi
   // ---------- UI ----------
   const state = { pm: "apt", picked: new Set(), rcOn: true, mode: "paste" };
   const $ = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const tick = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+  const REPO = "https://github.com/Magnus167/dev-tools-installer";
 
+  // ---------- pixel icons ----------
+  // Drawn for this page on 16x16 grids, one character per pixel ("." is transparent). Each becomes an
+  // inline SVG with crisp edges, shown at whole-pixel sizes (16 or 32 px). The pixel boot in the page
+  // header uses the same palette and lives in the markup, so it shows without JavaScript.
+  const PX = {
+    k: "#1B2433", w: "#FFFFFF", l: "#E6ECF4", s: "#A9B3BF", S: "#D3D9E1", D: "#5E6875",
+    b: "#2F6FD6", B: "#9CC2F5", d: "#1D4C9E", g: "#3E9A34", G: "#8EE07A", y: "#F2C230",
+    Y: "#FCE38A", o: "#DD7A1F", O: "#F5B26B", r: "#CF3F33", R: "#F08A7E", e: "#8E2A22",
+    t: "#24968F", T: "#8FD8CF", x: "#121A24", c: "#3B4654",
+  };
+  const ICONS = {
+    toolbox: [
+      "................", "................", ".....kkkkkk.....", "....kSSSSSSk....",
+      "....kSk..kSk....", ".kkkkkkkkkkkkkk.", ".kRRRRRRRRRRRRk.", ".krrrrrrrrrrrrk.",
+      ".kkkkkkyykkkkkk.", ".krrrrkyykrrrrk.", ".krrrrrkkrrrrrk.", ".krrrrrrrrrrrrk.",
+      ".krrrrrrrrrrrrk.", ".keeeeeeeeeeeek.", ".kkkkkkkkkkkkkk.", "................",
+    ],
+    codepage: [
+      "................", "..kkkkkkkkk.....", "..kwwwwwwwkk....", "..kwwwwwwwkSk...",
+      "..kwwwwwwwkSSk..", "..kwwwwwwwkkkk..", "..kwwbbwwbbwwk..", "..kwwbwwwwbwwk..",
+      "..kwwbwwwwbwwk..", "..kwbwwwwwwbwk..", "..kwwbwwwwbwwk..", "..kwwbwwwwbwwk..",
+      "..kwwbbwwbbwwk..", "..kllllllllllk..", "..kkkkkkkkkkkk..", "................",
+    ],
+    crates: [
+      "................", "................", "................", "...kkkkkkkkkk...",
+      "...koOoOoOoOk...", "...koOoOoOoOk...", "...koOoOoOoOk...", "...kkkkkkkkkk...",
+      ".kkkkkkkkkkkkkk.", ".kbBbBbBbBbBbBk.", ".kbBbBbBbBbBbBk.", ".kbBbBbBbBbBbBk.",
+      ".kbBbBbBbBbBbBk.", ".kkkkkkkkkkkkkk.", "................", "................",
+    ],
+    cloud: [
+      "................", "................", "................", ".......kkkk.....",
+      "......kwwwwk....", "...kkkwwwwwwk...", "..kwwwkwwwwwwkk.", "..kwwwwwwwwwwwwk",
+      ".kwwwwwwwwwwwwwk", "kwwwwwwwwwwwwwBk", "kwwwwwwwwwwwwBBk", "kBwwwwwwwwwwBBBk",
+      ".kBBBBBBBBBBBBk.", "..kkkkkkkkkkkk..", "................", "................",
+    ],
+    folder: [
+      "................", "................", ".kkkkk..........", "kyyyyyk.........",
+      "kyyyyyykkkkkkkk.", "kyyyyyyyyyyyyyk.", "kkkkkkkkkkkkkkkk", "kYYYYYYYYYYYYYYk",
+      "kYyyyyyyyyyyyyyk", "kyyyyyyyyyyyyyyk", "kyyyyyyyyyyyyyyk", "kyyyyyyyyyyyyyyk",
+      "kyyyyyyyyyyyyyyk", "kooooooooooooook", "kkkkkkkkkkkkkkkk", "................",
+    ],
+    lens: [
+      "................", "....kkkkk.......", "...kDDDDDk......", "..kDwwBBBDk.....",
+      ".kDwwBBBBBDk....", ".kDwBBBBBBDk....", ".kDBBBBBBBDk....", ".kDBBBBBBBDk....",
+      "..kDBBBBBDk.....", "...kDDDDDkk.....", "....kkkkkDDk....", ".........kDDDk..",
+      "..........kDDDk.", "...........kDDk.", "............kk..", "................",
+    ],
+    database: [
+      "................", "....kkkkkkkk....", "..kkTTTTTTTTkk..", ".kTTTTTTTTTTTTk.",
+      ".kttTTTTTTTTttk.", ".ktttkkkkkktttk.", ".kttttttttttttk.", ".kTTttttttttTTk.",
+      ".ktTTTTTTTTTTtk.", ".ktttkkkkkktttk.", ".kttttttttttttk.", ".kTTttttttttTTk.",
+      ".ktTTTTTTTTTTtk.", "..kkttttttttkk..", "....kkkkkkkk....", "................",
+    ],
+    gear: [
+      "................", "......kkkk......", "..kk..kSSk..kk..", "..kSkkkSSkkkSk..",
+      "..kSSSSSSSSSSk..", "...kSSSkkSSSk...", ".kkkSSkwwkSSkkk.", ".kSSSkw..wkSSSk.",
+      ".kSSSkw..wkSSSk.", ".kkkSSkwwkSSkkk.", "...kSSSkkSSSk...", "..kSSSSSSSSSSk..",
+      "..kSkkkDDkkkSk..", "..kk..kDDk..kk..", "......kkkk......", "................",
+    ],
+    panes: [
+      "................", "................", ".kkkkkkkkkkkkkk.", ".kbbbbbbbbbbbbk.",
+      ".kkkkkkkkkkkkkk.", ".kxxxxxkxxxxxxk.", ".kxGGGxkxYYYxxk.", ".kxxxxxkxxxxxxk.",
+      ".kxGGxxkxGGGGxk.", ".kxxxxxkkkkkkkk.", ".kxGGGxkxxxxxxk.", ".kxxxxxkxGGxxxk.",
+      ".kxGxxxkxxxxxxk.", ".kkkkkkkkkkkkkk.", "................", "................",
+    ],
+    prompt: [
+      "................", "................", ".kkkkkkkkkkkkkk.", ".kcccccccccccck.",
+      ".kxxxxxxxxxxxxk.", ".kxGGxxxxxxxxxk.", ".kxxGGxxxxxxxxk.", ".kxxxGGxxxxxxxk.",
+      ".kxxGGxxxxxxxxk.", ".kxGGxxxGGGGxxk.", ".kxxxxxxxxxxxxk.", ".kxxxxxxxxxxxxk.",
+      ".kkkkkkkkkkkkkk.", "................", "................", "................",
+    ],
+    chip: [
+      "................", "....s.s..s.s....", "....s.s..s.s....", "...kkkkkkkkkk...",
+      ".sskwDDDDDDDkss.", "...kDDDDDDDDk...", ".sskDDssssDDkss.", "...kDDsSSsDDk...",
+      "...kDDsSSsDDk...", ".sskDDssssDDkss.", "...kDDDDDDDDk...", ".sskDDDDDDDDkss.",
+      "...kkkkkkkkkk...", "....s.s..s.s....", "....s.s..s.s....", "................",
+    ],
+    globe: [
+      "................", ".....kkkkkk.....", "...kkbbbbbbkk...", "..kbbggbbbbbbk..",
+      "..kbgggggbbBbk..", ".kbbggggbbbbbbk.", ".kbbbgggbbbggbk.", ".kbbbbggbbgggbk.",
+      ".kbbbbbbbbgggbk.", ".kbbbbbbbbggbbk.", ".kbbbbbbbggbbbk.", "..kbbbbbbgbbbk..",
+      "..kbbbbbbbbbbk..", "...kkbbbbbbkk...", ".....kkkkkk.....", "................",
+    ],
+  };
+  const GROUP_ICON = {
+    "Essentials": "toolbox", "Languages": "codepage", "Containers": "crates", "Infra and cloud": "cloud",
+    "Files and text": "folder", "Search and data": "lens", "Data": "database", "Dev workflow": "gear",
+    "Terminal apps": "panes", "Shell": "prompt", "System": "chip", "Network": "globe",
+  };
+  // one <path> per colour, one rectangle per horizontal run of pixels
+  function pixelSvg(name, size) {
+    const grid = ICONS[name];
+    if (!grid) return "";
+    const runs = {};
+    grid.forEach((row, y) => {
+      for (let x = 0; x < row.length;) {
+        let e = x + 1;
+        while (e < row.length && row[e] === row[x]) e++;
+        if (row[x] !== ".") (runs[row[x]] = runs[row[x]] || []).push(`M${x} ${y}h${e - x}v1H${x}z`);
+        x = e;
+      }
+    });
+    const paths = Object.entries(runs).map(([ch, d]) => `<path fill="${PX[ch]}" d="${d.join("")}"/>`).join("");
+    return `<svg class="px" width="${size}" height="${size}" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true" focusable="false">${paths}</svg>`;
+  }
+
+  // ---------- rendering ----------
   function renderPms() {
-    $("#pms").innerHTML = PM_SHOWN.map(p => `
-      <div class="pm"><input type="radio" name="pm" id="pm-${p}" value="${p}" ${p === state.pm ? "checked" : ""}>
-        <label for="pm-${p}"><span class="cmd">${PM[p].label ? PM[p].label.replace(/ (\(.*\))$/, " <small>$1</small>") : p}</span><span class="distros">${PM[p].distros}</span></label></div>`).join("");
-    $("#pms").querySelectorAll("input").forEach(i => i.addEventListener("change", () => { state.pm = i.value; update(); }));
+    $("#pms").innerHTML = PM_SHOWN.map(p => {
+      const m = /^(\S+) \((.*)\)$/.exec(PM[p].label || "");
+      const name = m ? `${m[1]} <small>${m[2]}</small>` : p;
+      return `<label class="pm"><input type="radio" name="pm" value="${p}"${p === state.pm ? " checked" : ""}>`
+        + `<span class="pmname">${name}</span><span class="pmd">${PM[p].distros}</span></label>`;
+    }).join("");
+    $$("#pms input").forEach(i => i.addEventListener("change", () => { state.pm = i.value; update(); }));
   }
 
   // what the filter matches against, per tool
   const HAY = Object.fromEntries(TOOLS.map(t => [t.id, [t.id, t.name, t.bin || "", t.desc, t.group].join(" ").toLowerCase()]));
 
+  // Each tool is a real checkbox named by the tool and described by its install method and description.
+  // Tools that can't be changed (unavailable here, or needed by another pick) use aria-disabled rather
+  // than disabled, so they stay focusable and a screen reader can still reach the reason.
   function renderTools() {
     $("#groups").innerHTML = GROUPS.map(([g, ids], gi) => `
-      <div class="group" data-group="${gi}"><h3 id="g-${gi}">${g} <span class="gcount"></span></h3><div class="tools" role="group" aria-labelledby="g-${gi}">
-      ${ids.map(id => { const t = BYID[id]; return `
+      <fieldset class="group" data-group="${gi}">
+        <legend>${pixelSvg(GROUP_ICON[g], 32)}<span>${esc(g)}</span><span class="gcount"></span></legend>
+        ${ids.map(id => { const t = BYID[id]; return `
         <label class="tool" data-id="${id}">
-          <input type="checkbox" value="${id}">
-          <span class="box" style="color:var(--on-accent)">${tick}</span>
-          <span class="name">${t.name}</span>
-          <span class="via"></span>
-          <span class="desc"></span>
+          <input type="checkbox" value="${id}" aria-labelledby="n-${id}" aria-describedby="v-${id} d-${id}">
+          <span class="name" id="n-${id}">${esc(t.name)}</span>
+          <span class="via" id="v-${id}"></span>
+          <span class="desc" id="d-${id}"></span>
         </label>`; }).join("")}
-      </div></div>`).join("");
-    $("#groups").querySelectorAll(".tool input").forEach(i => i.addEventListener("change", () => {
-      i.checked ? state.picked.add(i.value) : state.picked.delete(i.value); update();
-    }));
+      </fieldset>`).join("");
+    $$("#groups .tool input").forEach(i => {
+      i.addEventListener("click", e => { if (i.getAttribute("aria-disabled") === "true") e.preventDefault(); });
+      i.addEventListener("change", () => { i.checked ? state.picked.add(i.value) : state.picked.delete(i.value); update(); });
+    });
   }
 
   // Filter: every word must appear in the tool's id, name, binary, description or group.
@@ -1846,7 +2211,7 @@ fi
   function applyFilter() {
     const words = filterWords();
     let shown = 0;
-    document.querySelectorAll(".group").forEach(g => {
+    $$(".group").forEach(g => {
       let n = 0;
       g.querySelectorAll(".tool").forEach(el => {
         const hit = words.every(w => HAY[el.dataset.id].includes(w));
@@ -1855,68 +2220,100 @@ fi
       g.hidden = n === 0; shown += n;
     });
     $("#qstatus").textContent = !words.length ? ""
-      : shown ? `${shown} of ${TOOLS.length} tools match.` : `No tools match “${$("#q").value.trim()}”.`;
-    $("#all").textContent = words.length ? "Select shown" : "Select all";
+      : shown ? `${shown} of ${TOOLS.length} tools match.` : `No tools match “${$("#q").value.trim()}”. Try a shorter word.`;
+    $("#qclear").hidden = !$("#q").value;
+    $("#qreset").hidden = !(words.length && !shown);
+    $("#all").textContent = words.length ? `Select shown (${shown})` : "Select all";
+  }
+  function clearFilter() { $("#q").value = ""; applyFilter(); }
+
+  // The one-liners. They fetch install.sh from this page's own version directory; Alpine pipes to sh,
+  // because install.sh adds bash there before running itself again.
+  function commands(pm, combo) {
+    const base = `curl -fsSL ${SITE_HERE}install.sh | ${pm === "apk" ? "sh" : "bash"} -s --`;
+    const ids = TOOLS.filter(t => state.picked.has(t.id)).map(t => t.id);
+    return {
+      cmd: `${base} ${combo}`,
+      readable: `${base} ${pm} ${ids.join(" ")}${state.rcOn ? "" : " --no-shell"}`,
+      print: `${base} --print ${combo}`,
+    };
+  }
+
+  const TEXT = {};   // what each copy button copies, refreshed by update()
+  function setCode(sel, text) {
+    const el = $(sel);
+    el.textContent = text || "Tick at least one tool to get a command.";
+    el.classList.toggle("none", !text);
   }
 
   function update() {
     const pm = state.pm;
     const { all, active, neededBy } = resolve(state.picked, pm);
-    document.querySelectorAll(".tool").forEach(el => {
+    $$(".tool").forEach(el => {
       const id = el.dataset.id, t = BYID[id], h = how(t, pm);
       const input = el.querySelector("input");
       const picked = state.picked.has(id), skip = h.type === "skip";
       const locked = !picked && all.has(id) && !skip;
-      input.checked = all.has(id);
       // an unavailable tool can't be ticked, but a pick carried over from another pm can be unticked
-      input.disabled = locked || (skip && !picked);
+      const off = locked || (skip && !picked);
+      input.checked = all.has(id);
+      if (off) input.setAttribute("aria-disabled", "true"); else input.removeAttribute("aria-disabled");
       el.classList.toggle("locked", locked);
       el.classList.toggle("skipped", skip);
       el.classList.toggle("picked", picked);
-      el.title = skip ? `Not available with ${pm}: ${h.reason}` : "";
+      el.classList.toggle("off", off);
+      const said = h.type === "pkg" ? `Installed with ${pm} from your distro’s repos${h.fb ? ` (upstream ${VIA[h.fb]} if the package is unavailable)` : ""}.`
+        : h.type === "rc" ? "Added to your .bashrc or .zshrc as a shell function."
+        : skip ? `Not available with ${pm}.` : `Fetched from upstream (${h.via}).`;
       const via = el.querySelector(".via");
-      via.textContent = h.via;
-      via.classList.toggle("native", h.type === "pkg");
-      via.title = h.type === "pkg" ? `Installed with ${pm} from your distro’s repos${h.fb ? ` (upstream ${VIA[h.fb]} if the package is unavailable)` : ""}`
-        : h.type === "rc" ? "Added to your .bashrc or .zshrc"
-        : skip ? `Not available with ${pm}` : `Fetched from upstream (${h.via})`;
+      // spoken via aria-describedby; for an unavailable tool the description below already gives the reason
+      via.innerHTML = `<span aria-hidden="true">${esc(h.type === "rc" ? "shell" : h.via)}</span>${skip ? "" : `<span class="sr-only">${esc(said)}</span>`}`;
+      via.title = skip ? "" : said;
+      via.className = "via" + (h.type === "pkg" ? " native" : h.type === "fn" ? " fn" : "");
       el.querySelector(".desc").innerHTML = esc(t.desc)
-        + (locked ? ` <em>Needed by ${neededBy[id].join(" and ")}.</em>` : "")
-        + (skip ? `<span class="why">${picked ? `Left out: not available with ${pm}` : `Not available with ${pm}`} (${esc(h.reason)}).</span>` : "");
+        + (locked ? ` <em>Needed by ${esc(neededBy[id].join(" and "))}.</em>` : "")
+        + (skip ? ` <span class="why">${picked ? `Left out: not available with ${pm}` : `Not available with ${pm}`} (${esc(h.reason)}).</span>` : "");
     });
-    document.querySelectorAll(".group").forEach(g => {
+    $$(".group").forEach(g => {
       const n = GROUPS[+g.dataset.group][1].filter(id => all.has(id)).length;
-      g.querySelector(".gcount").textContent = n ? `${n} selected` : "";
+      g.querySelector(".gcount").textContent = n ? `${n} picked` : "";
     });
-    document.querySelectorAll("#pms input").forEach(i => { i.checked = i.value === pm; });
+    $$("#pms input").forEach(i => { i.checked = i.value === pm; });
     $("#rcopt").checked = state.rcOn;
+    $("#pcount").textContent = all.size ? `${all.size} of ${TOOLS.length} tools picked.` : "No tools picked yet.";
 
     const combo = encode(pm, state.picked, !state.rcOn);
     $("#comboid").textContent = combo;
-    $("#oneliner").textContent = `curl -fsSL ${SITE_HERE}install.sh | bash -s -- ${combo}`;
+    $("#sbcombo").textContent = combo;
     if (location.hash.slice(1) !== combo) { try { location.replace("#" + combo); } catch (e) {} }
 
-    document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+    $$(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
     $("#termtitle").textContent = state.mode === "paste" ? "Terminal" : "install.sh";
 
     const out = $("#out");
     const left = all.size - active.size;
     const leftNote = left ? `${left} picked tool${left > 1 ? "s are" : " is"} not available with ${pm} and left out.` : "";
-    if (!active.size) {
-      out.innerHTML = all.size
-        ? `<div class="empty"><strong>Nothing to install with ${pm}</strong>None of your picks are available here. Pick another tool or package manager.</div>`
-        : `<div class="empty"><strong>Nothing picked yet</strong>Tick a tool and your script appears here.</div>`;
-      $("#copy").disabled = true;
+    const ready = active.size > 0;
+    const c = ready ? commands(pm, combo) : {};
+    setCode("#oneliner", c.cmd); setCode("#readable", c.readable); setCode("#printcmd", c.print);
+    $("#pcmd").textContent = c.cmd || "Tick a tool to get your command.";
+    $("#pcmd").classList.toggle("none", !ready);
+    $$("[data-copy]").forEach(b => { b.disabled = !ready; });
+
+    if (!ready) {
+      out.innerHTML = `<div class="empty">${pixelSvg("prompt", 32)}<div>${all.size
+        ? `<strong>Nothing to install with ${pm}</strong>None of your picks are available here. Pick another tool or package manager.`
+        : `<strong>Nothing picked yet</strong>Tick a tool and your script appears here.`}</div></div>`;
       $("#hint").textContent = "";
       $("#summary").textContent = leftNote;
-      delete out.dataset.text;
+      $("#sbsum").textContent = leftNote || "No tools picked yet.";
+      for (const k of Object.keys(TEXT)) delete TEXT[k];
       return;
     }
-    $("#copy").disabled = false;
     const script = generate(state.pm, state.picked, state.rcOn, combo);
     const text = state.mode === "paste" ? pasteWrap(state.pm, script) : script;
     out.innerHTML = `<pre class="code" tabindex="0" aria-label="Generated script">${highlight(text)}</pre>`;
-    out.dataset.text = text;
+    Object.assign(TEXT, c, { script: text });
     $("#hint").innerHTML = state.mode === "paste"
       ? "Paste the whole block into a terminal. It saves the script to <code>/tmp/boots-install.sh</code> and runs it."
       : (state.pm === "apk" ? "Save as <code>install.sh</code>, then <code>apk add bash</code> and <code>bash install.sh</code>." : "Save as <code>install.sh</code>, read it, then run <code>bash install.sh</code>.");
@@ -1924,7 +2321,9 @@ fi
     const counts = {};
     TOOLS.filter(t => active.has(t.id)).forEach(t => { const h = how(t, pm); const k = h.type === "pkg" ? `from ${pm}` : h.type === "rc" ? "shell function" : "from upstream"; counts[k] = (counts[k] || 0) + 1; });
     const parts = Object.entries(counts).map(([k, v]) => `${v} ${k === "shell function" ? (v > 1 ? "shell functions" : "shell function") : k}`);
-    $("#summary").textContent = `${active.size} tool${active.size > 1 ? "s" : ""}: ${parts.join(", ")}.${leftNote ? " " + leftNote : ""}`;
+    const sum = `${active.size} tool${active.size > 1 ? "s" : ""}: ${parts.join(", ")}.${leftNote ? " " + leftNote : ""}`;
+    $("#summary").textContent = sum;
+    $("#sbsum").textContent = sum;
   }
 
   function highlight(text) {
@@ -1936,8 +2335,11 @@ fi
     }).join("\n");
   }
 
-  async function copy() {
-    const text = $("#out").dataset.text || "";
+  // Copy buttons: data-copy names the text, data-select the element to select if the clipboard is blocked.
+  const WHAT = { cmd: "Install command", readable: "Command with tool names", print: "View-first command", script: "Script" };
+  async function copy(b) {
+    const kind = b.dataset.copy, text = TEXT[kind] || "";
+    if (!text) return;
     let ok = false;
     try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
       const ta = document.createElement("textarea");
@@ -1946,10 +2348,15 @@ fi
       try { ok = document.execCommand("copy"); } catch (e2) {}
       ta.remove();
     }
-    const b = $("#copy");
+    if (!b.dataset.label) b.dataset.label = b.textContent;
     b.textContent = ok ? "Copied" : "Select and copy";
-    setTimeout(() => { b.textContent = "Copy script"; }, 1600);
-    if (!ok) { const pre = $("#out pre"); if (pre) { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } }
+    $("#announce").textContent = ok ? `${WHAT[kind]} copied to the clipboard.` : `Could not copy. The ${WHAT[kind].toLowerCase()} is selected; press Control C to copy it.`;
+    clearTimeout(b.timer);
+    b.timer = setTimeout(() => { b.textContent = b.dataset.label; }, 1600);
+    if (!ok) {
+      const el = $(b.dataset.select);
+      if (el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    }
   }
 
   function fromHash() {
@@ -1959,12 +2366,27 @@ fi
     return true;
   }
 
+  // Version, release notes and commit. The build stamps __APP_VERSION__ / __APP_COMMIT__ into the static
+  // markup too, so these are already right without JavaScript; this fixes up dev builds.
   function renderMeta() {
     const hooks = TOOLS.filter(t => t.init && !t.initAlways).map(t => t.name);
     $("#hooks").textContent = hooks.slice(0, -1).join(", ") + " and " + hooks[hooks.length - 1];
+    const rel = VERSION === "dev" ? REPO + "/releases" : `${REPO}/releases/tag/${VERSION}`;
+    $$("[data-relnotes]").forEach(a => { a.href = rel; });
+    $$("[data-ver]").forEach(el => { el.textContent = VERSION; });
+    $$(".here").forEach(el => { el.textContent = SITE_HERE; });
+    const sha = (($("#commit") || {}).textContent || "").trim();
+    const real = /^[0-9a-f]{7,40}$/.test(sha);
+    if (!real && $("#commit")) $("#commit").textContent = "dev";
     $("#ver").innerHTML = VERSION === "dev" ? "dev-tools-installer, development build"
-      : `dev-tools-installer <a href="https://github.com/Magnus167/dev-tools-installer/releases/tag/${VERSION}">${VERSION}</a>`;
+      : `dev-tools-installer <a href="${rel}">${VERSION}</a>`
+        + (real ? `, commit <a href="${REPO}/commit/${sha}"><code>${sha.slice(0, 7)}</code></a>` : "");
   }
+
+  const live = document.createElement("p");
+  live.className = "sr-only"; live.id = "announce";
+  live.setAttribute("role", "status"); live.setAttribute("aria-live", "polite");
+  document.body.appendChild(live);
 
   renderPms();
   renderTools();
@@ -1982,8 +2404,10 @@ fi
   q.addEventListener("input", applyFilter);
   q.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    if (q.value) { q.value = ""; applyFilter(); e.preventDefault(); } else q.blur();
+    if (q.value) { clearFilter(); e.preventDefault(); } else q.blur();
   });
+  $("#qclear").addEventListener("click", () => { clearFilter(); q.focus(); });
+  $("#qreset").addEventListener("click", () => { clearFilter(); q.focus(); });
   // "/" jumps to the filter unless you are typing somewhere
   window.addEventListener("keydown", e => {
     if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1991,8 +2415,8 @@ fi
     if (a && (a.isContentEditable || a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button)$/.test(a.type)))) return;
     e.preventDefault(); q.focus(); q.select();
   });
-  document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; update(); }));
-  $("#copy").addEventListener("click", copy);
+  $$(".seg button").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; update(); }));
+  $$("[data-copy]").forEach(b => b.addEventListener("click", () => copy(b)));
   window.addEventListener("hashchange", () => {
     if (location.hash.slice(1) !== encode(state.pm, state.picked, !state.rcOn) && fromHash()) update();
   });
