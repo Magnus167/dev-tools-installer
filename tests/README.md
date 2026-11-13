@@ -39,6 +39,11 @@ everything from the repo root.
   no script errors, every tool rendered, a combo link preselects and gives the right commands (Alpine: `sh` to
   install, `bash` for `--print` with the page-link note; a combo spelling a tool id gets its 0), and a link from a
   newer version shows the warning with a link to the latest.
+- `tests/build-site-check.sh`  builds the site (`scripts/build-site.sh`) from a throwaway clone with the working tree
+  committed and tagged as a fake v1.2.0, then checks root and `latest/` are redirect pages to v1.2.0 (JS, meta refresh,
+  canonical, plain link) serving v1.2.0's install.sh/tools.json/llms.txt, `sha256sum -c` in root, `latest/` and v1.2.0, and,
+  in headless Chromium (Docker), that `<SITE>#apt-1kx` and `<SITE>latest/#apt-1kx` land on `<SITE>v1.2.0/#apt-1kx`
+  with the page loaded and no errors (requests to the site URL are answered from the built tree).
 - `tests/installer-e2e.sh <html> [--jobs N] [--out DIR] [--only REGEX]`  the curl installer for real, in Docker: serves
   the built install.sh from a busybox httpd container on its localhost (client containers share its network, so
   `BOOTS_INSTALL_URL=http://localhost:8000/install.sh` is accepted) and runs `curl ... | bash -s -- <combo>` (ubuntu:24.04),

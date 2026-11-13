@@ -17,14 +17,16 @@ left out of the script.
 
 ## Command line
 
-`install.sh` builds the same script the page shows (byte for byte), saves it to a temp file and runs it:
+`install.sh` builds the same script the page shows (byte for byte), saves it to a temp file and runs it. Replace `vX.Y.Z` with a
+release (the page shows the exact command for the current one). Pinning the version keeps a command behaving the same
+forever; the unversioned `/install.sh` at the site root always follows the latest release.
 
 ```sh
-curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- apt-1kx          # a combo ID from the page
-curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- apt git docker node   # or tool ids
-curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | sh -s -- apk git jq           # Alpine: sh, it adds bash first
-curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- --print apt-1kx  # print the script, run nothing (any OS with bash)
-curl -fsSL https://magnus167.github.io/dev-tools-installer/install.sh | bash -s -- --list apt        # tool ids, and how each installs
+curl -fsSL https://magnus167.github.io/dev-tools-installer/vX.Y.Z/install.sh | bash -s -- apt-1kx          # a combo ID from the page
+curl -fsSL https://magnus167.github.io/dev-tools-installer/vX.Y.Z/install.sh | bash -s -- apt git docker node   # or tool ids
+curl -fsSL https://magnus167.github.io/dev-tools-installer/vX.Y.Z/install.sh | sh -s -- apk git jq           # Alpine: sh, it adds bash first
+curl -fsSL https://magnus167.github.io/dev-tools-installer/vX.Y.Z/install.sh | bash -s -- --print apt-1kx  # print the script, run nothing (any OS with bash)
+curl -fsSL https://magnus167.github.io/dev-tools-installer/vX.Y.Z/install.sh | bash -s -- --list apt        # tool ids, and how each installs
 ```
 
 Run it as your normal user, not with `sudo`: it calls sudo (or doas) itself for system packages, and under
@@ -104,8 +106,11 @@ release with generated notes, attaches `install.sh`, `tools.json`, `llms.txt` an
 same version: it reuses the draft. (A release created in the GitHub UI deploys Pages but gets no attached
 files.)
 
-Every release stays online at its own path, `https://magnus167.github.io/dev-tools-installer/vX.Y.Z/`, and
-the site root (and `/latest/`) serves the newest one. `scripts/build-site.sh` builds that tree from the git
+Every release stays online at its own path, `https://magnus167.github.io/dev-tools-installer/vX.Y.Z/`. The
+site root (and `/latest/`) is a small redirect page that sends the browser to the newest version's page and
+keeps the `#combo` (so `https://magnus167.github.io/dev-tools-installer/#apt-1kx` opens `.../vX.Y.Z/#apt-1kx`);
+without JavaScript a meta refresh and a plain link do the same. The root also serves the newest version's
+`install.sh`, `tools.json` and `llms.txt` unversioned, with a `SHA256SUMS` over the files there. `scripts/build-site.sh` builds that tree from the git
 tags and stamps each copy with its version and the tag's full commit sha (the page shows the version in the
 footer; every generated script's header carries version, short commit, page link and source repo); a build
 with no tags is labelled `dev`. Per version:
