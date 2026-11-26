@@ -1492,8 +1492,21 @@ fi
 </script>
 
 <script type="text/plain" data-snip="rc-clipcat">
-# clipcat <file>: copy a file to your local clipboard, even over SSH (OSC 52)
-clipcat() { base64 -w0 "$1" | sed 's/.*/\x1b]52;c;&\x07/' > /dev/tty; }
+# clipcat [file]: copy a file, or piped text, to your local clipboard, even over SSH (OSC 52)
+#   clipcat notes.md      or      cat notes.md | clipcat
+# Needs a terminal that supports OSC 52; inside tmux, set -g set-clipboard on.
+clipcat() {
+  local data
+  if [ "$#" -gt 0 ] && [ "$1" != "-" ]; then
+    [ -f "$1" ] || { echo "clipcat: '$1' is not a file" >&2; return 1; }
+    data=$(base64 < "$1" | tr -d '\n')
+  elif [ -t 0 ]; then
+    echo "usage: clipcat <file>   or   <command> | clipcat" >&2; return 2
+  else
+    data=$(base64 | tr -d '\n')
+  fi
+  printf '\033]52;c;%s\a' "$data" > /dev/tty
+}
 </script>
 
 <script type="text/plain" data-snip="rc-act">
@@ -1747,7 +1760,7 @@ fi
       skip: { apk: "its DuckDB dependency has no Alpine (musl) build",
               yum: "its pyarrow dependency needs a newer glibc than CentOS 7 or Amazon Linux 2 have" } },
     { id: "visidata", name: "visidata", bin: "vd", group: "Terminal apps", desc: "Spreadsheet TUI for any tabular file.", requires: ["uv"], fn: { "*": "visidata-uv" } },
-    { id: "clipcat", name: "clipcat", group: "Shell", desc: "Copy a file to your local clipboard, even over SSH.", rc: "rc-clipcat" },
+    { id: "clipcat", name: "clipcat", group: "Shell", desc: "Copy a file or piped text to your local clipboard, even over SSH.", rc: "rc-clipcat" },
     { id: "act", name: "act", group: "Shell", desc: "Activate the nearest .venv from anywhere in a project.", rc: "rc-act" },
     // ---- v1.0.0 additions (appended; same rule) ----
     // containers
