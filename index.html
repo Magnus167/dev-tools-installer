@@ -1594,6 +1594,26 @@ extract() {
 serve() { python3 -m http.server "${1:-8000}"; }
 </script>
 
+<script type="text/plain" data-snip="rc-checkip">
+# checkip: print your public IP address (tries a few services, with curl or else wget)
+checkip() {
+  local u ip
+  for u in https://checkip.amazonaws.com https://api.ipify.org https://icanhazip.com; do
+    if command -v curl >/dev/null 2>&1; then
+      ip=$(curl -fsS --max-time 5 "$u" 2>/dev/null)
+    elif command -v wget >/dev/null 2>&1; then
+      ip=$(wget -qO- -T 5 -t 1 "$u" 2>/dev/null)
+    else
+      echo "checkip: needs curl or wget" >&2; return 1
+    fi
+    ip=$(printf '%s' "$ip" | tr -d '[:space:]')
+    case "$ip" in ''|*[!0-9A-Fa-f.:]*) continue ;; esac
+    printf '%s\n' "$ip"; return 0
+  done
+  echo "checkip: could not reach an IP lookup service" >&2; return 1
+}
+</script>
+
 <script type="text/plain" data-snip="rc-java">
 export SDKMAN_DIR="$HOME/.sdkman"
 if [ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
@@ -1855,7 +1875,8 @@ fi
       native: { apt: "netcat-openbsd", dnf: "nmap-ncat", yum: "nmap-ncat", apk: "netcat-openbsd", pacman: "openbsd-netcat", zypper: "netcat-openbsd" } },
     { id: "socat", name: "socat", bin: "socat", group: "Network", desc: "netcat with more plumbing: sockets, files, TLS.", native: ALL("socat") },
     { id: "iperf3", name: "iperf3", bin: "iperf3", group: "Network", desc: "Measure network throughput between two hosts.",
-      native: { apt: "iperf3", dnf: "iperf3", yum: "iperf3", apk: "iperf3", pacman: "iperf3", zypper: "iperf" } },
+      native: { apt: "iperf3", dnf: "iperf3", yum: "iperf3", apk: "iperf3", pacman: "iperf3", zypper: "iperf" } },    // shortcuts added after v1.1.2
+    { id: "checkip", name: "checkip", group: "Shell", desc: "Print your public IP address (curl, or wget).", rc: "rc-checkip" },
   ];
   const BYID = Object.fromEntries(TOOLS.map(t => [t.id, t]));
   // Page order of groups and of tools inside them (independent of the TOOLS order).
@@ -1869,7 +1890,7 @@ fi
     ["Data", ["sqlite3", "duckdb", "ffmpeg", "pandoc"]],
     ["Dev workflow", ["hyperfine", "direnv", "just", "mise", "shellcheck", "precommit", "xh", "mkcert"]],
     ["Terminal apps", ["lazygit", "lazydocker", "bottom", "glow", "harlequin", "visidata", "btop", "ncdu", "neovim", "tmux", "zellij", "yazi"]],
-    ["Shell", ["zoxide", "starship", "atuin", "clipcat", "act", "mkcd", "extract", "serve"]],
+    ["Shell", ["zoxide", "starship", "atuin", "clipcat", "act", "mkcd", "extract", "serve", "checkip"]],
     ["System", ["htop", "tree", "rsync", "wget", "lsof", "strace", "iotop", "sysstat", "7zip", "watch", "entr"]],
     ["Network", ["nmap", "mtr", "traceroute", "dig", "whois", "tcpdump", "netcat", "socat", "iperf3"]],
   ];

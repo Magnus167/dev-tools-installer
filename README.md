@@ -58,7 +58,7 @@ package).
 | Data | sqlite3, duckdb, ffmpeg, pandoc |
 | Dev workflow | hyperfine, direnv, just, mise, shellcheck, pre-commit, xh, mkcert |
 | Terminal apps | lazygit, lazydocker, bottom, glow, harlequin, visidata, btop, ncdu, neovim, tmux, zellij, yazi |
-| Shell | zoxide, starship, atuin, clipcat, act, mkcd, extract, serve |
+| Shell | zoxide, starship, atuin, clipcat, act, mkcd, extract, serve, checkip |
 | System | htop, tree, rsync, wget, lsof, strace, iotop, sysstat, 7zip, watch, entr |
 | Network | nmap, mtr, traceroute, dig, whois, tcpdump, netcat, socat, iperf3 |
 
